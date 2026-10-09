@@ -449,7 +449,11 @@ async function switchOn() {
   go.disabled = true;
   go.textContent = "Starting…";
   try {
+    // iOS Safari starts audio only from inside the tap: resume before the first await, and play through the
+    // silent switch (audioSession "playback", Safari 16.4+)
+    try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* older Safari */ }
     const ac = new AudioContext({ sampleRate: 44100, latencyHint: "interactive" });
+    const resumed = ac.resume();
     const [wasm] = await Promise.all([
       fetch("felucca.wasm").then((r) => { if (!r.ok) throw new Error(`felucca.wasm: ${r.status}`); return r.arrayBuffer(); }),
       ac.audioWorklet.addModule("worklet.js")]);
@@ -472,6 +476,7 @@ async function switchOn() {
       };
       node.port.postMessage({ type: "load", wasm, sectors: loadFlash(), master: masterValue }, [wasm]);
     });
+    await resumed;
     await ac.resume();
     document.getElementById("start").hidden = true;
     go.textContent = "On";
