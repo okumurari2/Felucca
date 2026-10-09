@@ -1155,6 +1155,24 @@ static void maku_setup(void)
     maku_follow();
     maku_apply();
 }
+
+/* A new random world (docs/AMBIENT.md): the key, the scale, the tempo and how dense it starts, from `seed`. Call after
+ * maku_setup(); the same seed gives the same world. Every scale here is calm: no CHR, no HARM / BLUES / DIM */
+static void maku_world(uint32_t seed)
+{
+    static const uint8_t SC[] = {2, 3, 4, 5, 6, 9};          /* MIN DOR MIX PEN MPEN LYD */
+    uint32_t i;
+    rng_state = seed ? seed : 0x1234567u;
+    for (i = 0; i < 4u; i++)
+        (void)rng();                                          /* (a xorshift shows its seed for a few draws) */
+    trk[MAKU_DRA].p[P_ROOT] = (int16_t)(rng() % 12u);
+    trk[MAKU_DRA].p[P_SCALE] = SC[rng() % sizeof SC];
+    maku_follow();
+    maku.root = (uint8_t)trk[MAKU_DRA].p[P_ROOT];
+    maku.scale = (uint8_t)trk[MAKU_DRA].p[P_SCALE];
+    song.g[G_BPM] = (int16_t)(70u + rng() % 21u);             /* 70..90 */
+    maku_set_density(24u + rng() % 33u);                      /* 24..56: a hint to a pulse */
+}
 static void set_engine(uint32_t ei) { set_engine_of(TSEL, ei); }
 
 static void track_defaults(track_t *t)

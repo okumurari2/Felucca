@@ -329,9 +329,48 @@ static int cost(void)
     return bad;
 }
 
+/* WORLD: every seed gives a calm world in range, the same seed the same world, and it plays only scale notes */
+static int world(void)
+{
+    int bad = 0, ok = 1, diff = 0;
+    uint32_t seed, k, bpm0 = 0, root0 = 0, sc0 = 0;
+    for (seed = 1; seed <= 400u; seed++) {
+        static const uint8_t CALM[] = {2, 3, 4, 5, 6, 9};
+        int in = 0;
+        ui_power_on();
+        maku_setup();
+        maku_world(seed * 2654435761u);
+        for (k = 0; k < sizeof CALM; k++)
+            in |= trk[1].p[P_SCALE] == CALM[k];
+        ok &= in && trk[1].p[P_ROOT] >= 0 && trk[1].p[P_ROOT] < 12 && song.g[G_BPM] >= 70 && song.g[G_BPM] <= 90 &&
+              maku.dens >= 24u && maku.dens <= 56u && maku.on;
+        for (k = 0; k < NTRK; k++)
+            ok &= trk[k].p[P_ROOT] == trk[1].p[P_ROOT] && trk[k].p[P_SCALE] == trk[1].p[P_SCALE];
+        if (seed == 1u) {
+            bpm0 = (uint32_t)song.g[G_BPM];
+            root0 = (uint32_t)trk[1].p[P_ROOT];
+            sc0 = (uint32_t)trk[1].p[P_SCALE];
+        } else if ((uint32_t)song.g[G_BPM] != bpm0 || (uint32_t)trk[1].p[P_ROOT] != root0 || (uint32_t)trk[1].p[P_SCALE] != sc0) {
+            diff++;
+        }
+    }
+    bad += check("WORLD: 400 seeds: a calm scale, ROOT 0..11 on all four, BPM 70..90, DENSITY 24..56, MAKU on", ok);
+    bad += check("  the worlds differ (most seeds are not seed 1's)", diff > 300);
+    ui_power_on();
+    maku_setup();
+    maku_world(12345u);
+    bpm0 = (uint32_t)song.g[G_BPM];
+    root0 = (uint32_t)trk[1].p[P_ROOT];
+    ui_power_on();
+    maku_setup();
+    maku_world(12345u);
+    bad += check("  the same seed, the same world", bpm0 == (uint32_t)song.g[G_BPM] && root0 == (uint32_t)trk[1].p[P_ROOT]);
+    return bad;
+}
+
 int main(void)
 {
-    int bad = setup() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost();
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost();
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }

@@ -236,7 +236,7 @@ static void cdc_task(void) {}
 #undef usb_detach
 
 /* --------------------------------------------------------- the device --- */
-static uint32_t web_booted, web_boot_ms, web_last_frame;
+static uint32_t web_booted, web_boot_ms, web_last_frame, web_seed;
 
 /* main.c fm1_main's boot, up to the main loop (no USB, no UART, no panel setup) */
 static void web_power_on(void)
@@ -256,17 +256,8 @@ static void web_power_on(void)
     kb_boot_hold = 1;                     /* main.c (#137): the keys silent under the splash */
     audio_init();
     boot_leds();                          /* main.c: the power-on LED sweep, from the scan's start */
-    autosave_boot(boot_clean);            /* main.c: the last session's music (1.2, project.c) */
-    {   /* the browser's first visit has nothing to play: MAKU (maku.c) goes on, at DENSITY 48 (a kick pulse over the
-         * drones), when every sequencer is empty; a kept session is left alone (MAKU is not stored: MENU > SYSTEM > MAKU) */
-        uint32_t i, empty = 1;
-        for (i = 0; i < NTRK; i++)
-            empty &= (uint32_t)seq_is_empty(&trk[i]);
-        if (empty) {
-            maku_setup();
-            maku_set_density(48);
-        }
-    }
+    maku_setup();                         /* main.c: always on, a new random world every visit (AMBIENT.md) */
+    maku_world(web_seed);
     web_boot_ms = fm1_ms + 430u;         /* main.c: 30 + 400 ms before the first frame */
     web_booted = 1;
 }
@@ -384,6 +375,8 @@ EXPORT void web_enc(uint32_t role, int32_t n)
     if (role < NE)
         web_enc_steps[panel.enc[role] % 7u] += n * panel.dir[role];
 }
+/* the world of this visit (maku_world): the page passes a random number before web_boot */
+EXPORT void web_set_seed(uint32_t v) { web_seed = v; }
 EXPORT void web_master(uint32_t v) { web_master_adc = v > 1023u ? 1023u : v; }
 /* a channel message from Web MIDI, as a USB-MIDI packet arrives (usb.c midi_enqueue): 0 = the ring was full */
 EXPORT uint32_t web_midi(uint32_t status, uint32_t d1, uint32_t d2)

@@ -55,6 +55,7 @@ if (typeof registerProcessor === "function") {
           ex.web_nor_erase();
           restoreSectors(new Uint8Array(ex.memory.buffer, ex.web_nor(), ex.web_nor_size()), m.sectors);
           ex.web_master(m.master ?? 700);
+          if (ex.web_set_seed) ex.web_set_seed((Math.random() * 4294967296) >>> 0);
           ex.web_boot();
           this.ex = ex;
           this.sentWrites = ex.web_flash_writes_count();

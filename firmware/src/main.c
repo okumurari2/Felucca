@@ -188,7 +188,9 @@ static void fm1_main(void)
         panel_setup();                        /* OCT- + OCT+ held at power-on */
         settings_save();
     }
-    autosave_boot(boot_clean);                /* (1.2) the last session's music, under the splash */
+    maku_setup();                             /* AMBIENT.md: always on; nothing is restored, every boot is a new world */
+    maku_world((uint32_t)fm1_adc_read(FM1_ADC_BATT) * 0x9E3779B1u ^ (uint32_t)fm1_adc_read(FM1_ADC_MASTER) * 0x85EBCA6Bu ^
+               fm1_ms * 0xC2B2AE35u);
     for (ms = 0; ms < 400u; ms += 10u) {      /* the splash; the pot followed (MIDI IN plays under it) */
         fm1_delay_ms(10);
         master_poll();
