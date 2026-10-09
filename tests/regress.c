@@ -326,7 +326,7 @@ static uint64_t instr_now(void)
  * the voices it really starts; the cost of the whole interlude mode, ducking included */
 static void job_cpu_maku(void)
 {
-    static const uint8_t ROLE[NPART][4] = {{ENGI_DRUM, 0, 16, 0}, {0, 1, MAKU_DRA_LEN, 0}, {0, 3, MAKU_DRB_LEN, 0}, {0, 5, 16, 0}};
+    static const uint8_t ROLE[NPART][4] = {{ENGI_DRUM, 0, 16, 0}, {ENGI_PHYS, 7, MAKU_DRA_LEN, 0}, {8, 0, MAKU_DRB_LEN, 0}, {ENGI_PHYS, 4, MAKU_ARP_LEN, 0}};
     uint32_t p, k, nb = FS / CTL;
     uint64_t i0 = 0, t0 = 0;
     host_tracks_init();

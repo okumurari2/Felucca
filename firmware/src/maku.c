@@ -5,9 +5,13 @@
  *
  *   track 1  KICK   16 steps, the time axis. DENSITY thins it out: nothing -> once a bar (a hint) -> every 2 beats
  *                   (a pulse) -> every beat. The kick's pitch follows the ROOT (DRUM TUNE).
- *   track 2  DRONE  57 steps: three long notes 19 steps apart (the root, a scale 3rd and 5th, rotating).
- *   track 3  DRONE  13 steps: two high notes, never lining up with track 2 (57 and 13 are coprime-ish).
- *   track 4  ARP    starts at a random place of a 32-note table, plays N steps in a row, jumps to another place.
+ *   track 2  DRONE  57 steps: a chord every 19 steps, open voicings (root + 5th + octave, sus2, sus4, a wide minor
+ *                   10th), six of them in turn so the harmony drifts slowly instead of looping.
+ *   track 3  SHIMMER 13 steps: a high note, then a dyad (a note and its 5th) 7 steps later, from a six-note cycle;
+ *                   13 never lines up with 57.
+ *   track 4  ARP    29 steps: a written 32-place phrase of wide, sparse pentatonic-like leaps with breaths (rests) in it,
+ *                   played from a random place for N steps, then a jump. Its last 5 steps of 29 are silent: the phrase
+ *                   breathes once every 29 steps, against the kick's 16.
  *                   Every note is a degree of the SCALE (maku_note), so nothing is ever out of key.
  *
  * "Tidy, loosen, tidy": the higher the DENSITY, the more the arp's table is re-rolled as it plays, the shorter its
@@ -19,6 +23,9 @@
 #define MAKU_ARP 3u
 #define MAKU_DRA_LEN 57u
 #define MAKU_DRB_LEN 13u
+#define MAKU_ARP_LEN 29u
+#define MAKU_ARP_GAP 24u         /* arp steps 24..28 are silent: the breath */
+#define MAKU_REST 255u
 #define MAKU_TABLE 32u
 
 static struct {
@@ -57,6 +64,22 @@ static uint32_t maku_note(const track_t *t, uint32_t deg, uint32_t base)
     n = base + (uint32_t)t->p[P_ROOT] + 12u * (deg / count) + i;
     return n > 127u ? 127u : n;
 }
+
+/* the written material, as scale degrees (0 = ROOT, 7 = the octave; maku_note keeps them in the scale) */
+static const uint8_t MAKU_CHORD[6][3] = {      /* DRONE A, from C2: open and unresolved, no third in the first rows */
+    {0, 4, 7},                                  /* root, 5th, octave */
+    {0, 4, 8},                                  /* .. the 9th on top: sus2 */
+    {0, 3, 7},                                  /* sus4 */
+    {0, 4, 7},
+    {0, 4, 9},                                  /* a wide minor 10th */
+    {0, 1, 4},                                  /* root, 2nd, 5th: a cluster, the only close one */
+};
+static const uint8_t MAKU_SHIM_A[6] = {11, 9, 14, 11, 13, 9};   /* SHIMMER, step 0: a single high note */
+static const uint8_t MAKU_SHIM_B[6] = {7, 9, 7, 8, 9, 11};      /* step 7: the lower note of a dyad (+4: its 5th) */
+static const uint8_t MAKU_PHRASE[MAKU_TABLE] = {              /* ARP: two 16-place phrases, 255 a breath */
+    11, 255, 14, 11, 9, 255, 7, 9, 11, 14, 16, 255, 14, 11, 9, 255,
+    9, 11, 255, 7, 14, 255, 11, 9, 7, 255, 9, 11, 14, 255, 11, 255,
+};
 
 /* the kick's chance (percent) on step idx of 16 at density d: each rung adds steps, and fades them in so the
  * pulse grows rather than switches. d<4: silence */
@@ -99,21 +122,37 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             return 0;
         if (idx == 0)
             maku.cyc_a++;
-        out->n = 1;
-        out->note[0] = (uint8_t)maku_note(t, 2u * ((idx / 19u + maku.cyc_a) % 3u), 36u);   /* root, 3rd, 5th */
-        out->vel = (uint8_t)(86u - d / 4u);
+        {
+            const uint8_t *c = MAKU_CHORD[(idx / 19u + 3u * maku.cyc_a) % 6u];   /* (3 a cycle: six chords in two cycles) */
+            uint32_t k;
+            for (k = 0; k < 3u; k++)
+                out->note[k] = (uint8_t)maku_note(t, c[k], 36u);
+            out->n = 3;
+        }
+        out->vel = (uint8_t)(78u - d / 4u - (idx / 19u) * 6u);
         return 1;
     case MAKU_DRB:
         if (idx != 0 && idx != 7u)
             return 0;
         if (idx == 0)
             maku.cyc_b++;
-        out->n = 1;
-        out->note[0] = (uint8_t)maku_note(t, (idx ? 11u : 9u) + 2u * (maku.cyc_b % 3u), 36u);
-        out->vel = (uint8_t)(66u - d / 5u);
+        if (idx == 0) {
+            out->note[0] = (uint8_t)maku_note(t, MAKU_SHIM_A[maku.cyc_b % 6u], 36u);
+            out->n = 1;
+        } else {
+            uint32_t lo = MAKU_SHIM_B[maku.cyc_b % 6u];
+            out->note[0] = (uint8_t)maku_note(t, lo, 48u);
+            out->note[1] = (uint8_t)maku_note(t, lo + 4u, 48u);
+            out->n = 2;
+        }
+        out->vel = (uint8_t)(58u - d / 5u);
         return 1;
     case MAKU_ARP: {
-        uint32_t deg, h;
+        uint32_t deg;
+        if (idx >= MAKU_ARP_GAP) {                  /* the breath: the phrase ends and the next one starts elsewhere */
+            maku.run_left = 0;
+            return 0;
+        }
         if (d < 16u || (uint32_t)(rng() % 100u) >= 15u + (d - 16u) * 85u / 95u)
             return 0;
         if (!maku.run_left) {                       /* jump: a random place, a run of 3..8 (shorter when dense) */
@@ -121,14 +160,15 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             maku.run_left = (uint8_t)(3u + rng() % (6u - d / 32u));
         }
         maku.run_left--;
-        h = maku_hash(maku.pos);
-        deg = 7u + (h >> 8) % 10u;
+        deg = MAKU_PHRASE[maku.pos];
+        maku.pos = (uint8_t)((maku.pos + 1u) % MAKU_TABLE);
+        if (deg == MAKU_REST)
+            return 0;
         if ((uint32_t)(rng() % 100u) < d / 3u)      /* loosen: re-roll this note */
             deg = 7u + rng() % 10u;
-        maku.pos = (uint8_t)((maku.pos + 1u) % MAKU_TABLE);
         out->n = 1;
         out->note[0] = (uint8_t)maku_note(t, deg, 48u);
-        out->vel = (uint8_t)(54u + rng() % (16u + d / 4u));
+        out->vel = (uint8_t)(46u + rng() % (14u + d / 4u));
         return 1;
     }
     }

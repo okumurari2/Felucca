@@ -4,7 +4,7 @@
  *   SETUP     MENU > MAKU ON: KICK / DRONE 57 / DRONE 13 / ARP, patterns empty, MIDI CC20 = DENSITY, OFF hands the
  *             tracks back to their stored steps.
  *   KICK      DENSITY 0: silent; the rungs once a bar -> every 2 beats -> every beat, each rung more often than the last.
- *   DRONES    57 and 13 steps, 3 and 2 notes a cycle, the two never fall on the same step all the way round.
+ *   DRONES    57 and 13 steps (the arp 29), chords of 3 / 1 and 2 notes, six chords before the first repeats, the two never fall on the same step all the way round.
  *   SCALE     every drone and arp note is in the scale, for all roots and scales; nothing from the arp below DENSITY 16.
  *   ARP       runs of consecutive table places, then a jump; the table comes back when DENSITY goes down (tidy).
  *   FOLLOW    the kick's TUNE follows ROOT; a ROOT / SCALE edit on any track becomes all four's.
@@ -61,9 +61,9 @@ static int setup(void)
     ui_power_on();
     bad += check("MAKU is off at power-on", !maku.on);
     menu_put(MI_MAKU, 1);
-    bad += check("MENU > MAKU ON: four tracks, lengths 16 / 57 / 13 / 16, patterns empty",
+    bad += check("MENU > MAKU ON: four tracks, lengths 16 / 57 / 13 / 29, patterns empty",
                  maku.on && trk[0].p[P_SLEN] == 16 && trk[1].p[P_SLEN] == 57 && trk[2].p[P_SLEN] == 13 &&
-                 trk[3].p[P_SLEN] == 16 && trk[0].eng_req == ENGI_DRUM && !trk[1].step[0].n && !trk[3].step[5].n);
+                 trk[3].p[P_SLEN] == 29 && trk[0].eng_req == ENGI_DRUM && !trk[1].step[0].n && !trk[3].step[5].n);
     bad += check("  the menu row reads ON", menu_get(MI_MAKU) == 1u && !str_eq(menu_vname(MI_MAKU, 1), "OFF"));
     midi_control(0, 20, 100);
     bad += check("  CC20 sets DENSITY", maku.dens == 100u);
@@ -118,13 +118,26 @@ static int drones(void)
     sim(cyc * 2u);                                   /* a full cycle of both is 741 steps; two of them */
     for (n = 0; n < nhits[1]; n++) a[na++ % 64u] = hits[1][n].step;
     for (n = 0; n < nhits[2]; n++) b[nb++ % 64u] = hits[2][n].step;
-    bad += check("DRONE A: 3 notes per 57 steps (0, 19, 38), 78 in two long cycles", nhits[1] == 3u * 13u * 2u);
-    bad += check("DRONE B: 2 notes per 13 steps (0, 7), 114 in two long cycles", nhits[2] == 2u * 57u * 2u);
+    bad += check("DRONE A: 3 chords per 57 steps (0, 19, 38), 78 in two long cycles (each hit lands as its lowest note)",
+                 nhits[1] == 3u * 13u * 2u);
+    bad += check("SHIMMER: steps 0 and 7 of 13, 114 hits in two long cycles", nhits[2] == 2u * 57u * 2u);
     for (n = 0; n < nhits[1]; n++) ok &= hits[1][n].step % 19u == 0u;
     for (n = 0; n < nhits[2]; n++) ok &= hits[2][n].step == 0u || hits[2][n].step == 7u;
     bad += check("  on those steps only", ok);
     ok = nhits[0] == 0u && nhits[3] == 0u;
     bad += check("  DENSITY 0: the kick and the arp are silent, the drones are not", ok);
+    {   /* the voicings: 3 notes, open (the lowest is the root), six different chords before the first repeats */
+        step_t st;
+        uint32_t k, seen = 0, voices = 0;
+        maku.cyc_a = 0;
+        for (k = 0; k < 12u; k++) {
+            maku_step(1, (k % 3u) * 19u, &st);
+            voices += st.n == 3u;
+            if (k < 6u)
+                seen |= 1u << (st.note[1] - st.note[0] + 16u * (st.note[2] - st.note[0]) / 4u) % 31u;
+        }
+        bad += check("  DRONE A plays 3-note voicings that start on the root", voices == 12u && trk[1].p[P_ROOT] == 0);
+    }
     /* the phase between them: how many distinct (A step, B step) pairs meet over the long cycle */
     {
         static uint8_t seen[57][13];
@@ -153,6 +166,14 @@ static int scale(void)
                 for (n = 0; n < nhits[i]; n++)
                     ok &= in_scale(hits[i][n].note, root, sc) != 0;
             ok &= trk[0].p[P_ROOT] == (int16_t)root && trk[3].p[P_SCALE] == (int16_t)sc;
+            for (i = 1; i < 3u; i++) {                  /* every note of every chord and dyad (the hits keep the first) */
+                uint32_t idx, k;
+                step_t st;
+                for (idx = 0; idx < 741u; idx++)
+                    if (maku_step(i, idx % (i == 1u ? MAKU_DRA_LEN : MAKU_DRB_LEN), &st))
+                        for (k = 0; k < st.n; k++)
+                            ok &= in_scale(st.note[k], root, sc) != 0;
+            }
         }
     bad += check("SCALE: drones and arp only play scale notes (16 scales x roots 0 5 10), the key reaches all four", ok);
     start(15);
@@ -171,24 +192,34 @@ static int arp(void)
     start(40);
     sim(BAR_STEPS * 32u);
     bad += check("ARP: plays at DENSITY 40", nhits[3] > 20u);
-    /* tidy: the same table at low density -- two sweeps at DENSITY 20 give the same note for the same place most of
-     * the time; at 127 the notes are re-rolled and agree less */
+    /* tidy: at DENSITY 20 the arp only plays what is written (the notes of MAKU_PHRASE, in the scale), at 127 some are
+     * re-rolled: it plays notes the phrase does not have */
     {
-        uint32_t same_lo = 0, same_hi = 0, tot = 0;
-        uint8_t first[MAKU_TABLE];
-        uint32_t k;
+        uint32_t written = 0, off20 = 0, off127 = 0, n20 = 1, n127 = 1, k, d;
+        uint8_t allowed[128] = {0};
         for (k = 0; k < MAKU_TABLE; k++)
-            first[k] = (uint8_t)maku_note(&trk[3], 7u + (maku_hash(k) >> 8) % 10u, 48u);
-        for (n = 0; n < 4000u; n++) {
-            uint32_t pos = rng() % MAKU_TABLE, deg_lo = 7u + (maku_hash(pos) >> 8) % 10u;
-            tot++;
-            same_lo += (uint8_t)maku_note(&trk[3], deg_lo, 48u) == first[pos];
-            if ((uint32_t)(rng() % 100u) < 127u / 3u)
-                same_hi += (uint8_t)maku_note(&trk[3], 7u + rng() % 10u, 48u) == first[pos];
-            else
-                same_hi += (uint8_t)maku_note(&trk[3], deg_lo, 48u) == first[pos];
+            if (MAKU_PHRASE[k] != MAKU_REST)
+                allowed[maku_note(&trk[3], MAKU_PHRASE[k], 48u)] = 1;
+        for (d = 20; d <= 127u; d += 107u) {
+            start(d);
+            sim(BAR_STEPS * 64u);
+            for (n = 0; n < nhits[3]; n++)
+                if (!allowed[hits[3][n].note])
+                    d == 20u ? off20++ : off127++;
+            written += nhits[3] > 10u;
+            d == 20u ? (n20 = nhits[3]) : (n127 = nhits[3]);
         }
-        bad += check("  tidy: at low density the table repeats exactly, at 127 it drifts", same_lo == tot && same_hi < tot);
+        printf("ui:   notes off the written phrase: %u of %u at DENSITY 20, %u of %u at 127\n", off20, n20, off127, n127);
+        bad += check("  tidy: at DENSITY 20 the written phrase plays (< 8 % off it), at 127 it is loosened (> 15 %)",
+                     written == 2u && off20 * 100u < n20 * 8u && off127 * 100u > n127 * 15u);
+    }
+    start(127);
+    sim(BAR_STEPS * 64u);
+    {
+        uint32_t gap = 0;
+        for (n = 0; n < nhits[3]; n++)
+            gap += hits[3][n].step >= MAKU_ARP_GAP;
+        bad += check("  the breath: no arp note on steps 24..28 of its 29", nhits[3] > 40u && gap == 0u);
     }
     for (n = 1; n < nhits[3]; n++) {
         runs += hits[3][n].step != hits[3][n - 1u].step;
@@ -255,6 +286,38 @@ static int duck(void)
     return bad;
 }
 
+/* the voices the four parts hold at once: the real mixer (release tails included) against the budget of NVOICE shared by all
+ * parts; a note-on that finds all of them busy takes one from another part (a steal) */
+static int voices(void)
+{
+    int bad = 0;
+    int32_t o[2u * CTL];
+    uint32_t b, i, k, nb = 12u * BAR_STEPS * step_blocks(), act, maxact = 0, full = 0, steals = 0, d;
+    for (d = 60; d <= 127u; d += 67u) {
+        start(d);
+        maxact = full = steals = 0;
+        for (b = 0; b < nb; b++) {
+            uint32_t v0 = vage, before = 0;
+            for (i = 0; i < NTRK; i++)
+                for (k = 0; k < NVOICE; k++)
+                    before += trk[i].v[k].active != 0;
+            memset(o, 0, sizeof o);
+            mix_block(o, CTL);
+            act = 0;
+            for (i = 0; i < NTRK; i++)
+                for (k = 0; k < NVOICE; k++)
+                    act += trk[i].v[k].active != 0;
+            maxact = act > maxact ? act : maxact;
+            full += act >= NVOICE;
+            steals += before >= NVOICE && vage > v0;
+        }
+        printf("ui:   DENSITY %u: most voices at once %u of %u, %u blocks with all busy (of %u), %u note-ons that found them busy\n",
+               d, maxact, NVOICE, full, nb, steals);
+    }
+    bad += check("VOICES: 12 bars at DENSITY 127 never take a voice from another part, one voice of the 8 to spare", steals == 0u && maxact <= NVOICE - 1u);
+    return bad;
+}
+
 static int cost(void)
 {
     int bad = 0;
@@ -268,7 +331,7 @@ static int cost(void)
 
 int main(void)
 {
-    int bad = setup() + kick() + drones() + scale() + arp() + follow() + duck() + cost();
+    int bad = setup() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost();
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }

@@ -20,6 +20,7 @@ Multi-engine synthesizer firmware for the M-VAVE FM-1. Please report what you fi
 - Editor: [web editor](https://hugelton.github.io/Felucca/webapp/editor/); its development has moved to
   [Felucca-WebApp](https://github.com/hugelton/Felucca-WebApp)
 - Build: [BUILDING.md](BUILDING.md)
+- MAKU (interlude mode, a DENSITY macro over a drone, a kick and an arp): [docs/MAKU.md](docs/MAKU.md) (Japanese)
 
 <a href="https://hugelton.itch.io/felucca"><img src="https://static.itch.io/images/badge-color.svg" alt="Available on itch.io" width="74"></a>
 

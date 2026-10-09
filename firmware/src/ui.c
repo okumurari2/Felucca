@@ -1110,7 +1110,10 @@ static void apply_preset(uint32_t pi) { apply_preset_to(TSEL, pi); }
 static void maku_setup(void)
 {
     static const struct { uint8_t eng, pre, len, lvl, rev, dly; } R[NTRK] = {
-        {ENGI_DRUM, 0, 16, 104, 30, 0}, {0, 1, MAKU_DRA_LEN, 84, 90, 20}, {0, 3, MAKU_DRB_LEN, 70, 100, 30}, {0, 5, 16, 80, 70, 60},
+        {ENGI_DRUM, 0, 16, 104, 30, 0},                    /* KICK: a long round one */
+        {ENGI_PHYS, 7, MAKU_DRA_LEN, 90, 100, 20},         /* DRONE: PHYS DRONE STRING */
+        {8, 0, MAKU_DRB_LEN, 76, 110, 30},                 /* SHIMMER: GRAIN CLOUD PAD */
+        {ENGI_PHYS, 4, MAKU_ARP_LEN, 78, 85, 70},          /* ARP: PHYS KALIMBA, into the delay and the room */
     };
     uint32_t i;
     for (i = 0; i < NTRK; i++) {
@@ -1131,11 +1134,17 @@ static void maku_setup(void)
         t->p[P_LEVEL] = R[i].lvl;
         t->p[P_REV] = R[i].rev;
         t->p[P_DLY] = R[i].dly;
-        if (i == MAKU_DRA || i == MAKU_DRB) {     /* the drones ring on: slow attack, a long release */
-            t->p[P_ATK] = 90;
-            t->p[P_REL] = 120;
-            t->p[P_VOICE] = V_POLY;
+        t->p[P_VOICE] = V_POLY;
+        if (i == MAKU_KICK) {                     /* a round, low, long kick: KICK ROUND, TONE down, DECY up, SNAP down */
+            t->p[P_E2] = 40;
+            t->p[P_E3] = 110;
+            t->p[P_E4] = 20;
+            t->p[P_E6] = 1;
         }
+        if (i == MAKU_DRB)                        /* the shimmer fades in */
+            t->p[P_ATK] = 90;
+        if (i != MAKU_KICK)                       /* and every held sound rings on after its short gate */
+            t->p[P_REL] = i == MAKU_ARP ? 50 : 70;   /* (measured: tails this long keep the four parts under 8 voices) */
     }
     song.g[G_BPM] = 72;
     maku.on = 1;
