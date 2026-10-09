@@ -548,9 +548,37 @@ static int buttons(void)
     return bad;
 }
 
+static int screen(void)
+{
+    int bad = 0;
+    uint32_t i, lit = 0, w;
+    start(40);
+    ui.home = 1; ui.menu = 0; ui.confirm = 0;
+    maku_world(7);
+    song.sel = 0;
+    sim(40);
+    scope_w = 0;
+    for (w = 0; w < SCOPE_N; w++)
+        scope_buf[w] = (int16_t)(8000.0 * sin(w * 0.15));
+    for (i = 0; i < 8u; i++)
+        grid_hit(&trk[0], i * 2u, 0, 1);
+    ui.force = 1;
+    ui_draw();
+    for (i = 0; i < 240u * 240u; i++)
+        lit += host_screen[i] != host_screen[0];
+    bad += check("SCREEN: four quadrants drawn, not blank", lit > 1500u);
+    if (getenv("MAKU_PPM")) {
+        screen_save(getenv("MAKU_PPM"), "maku-kick");
+        song.sel = 3;
+        ui.force = 1;
+        screen_save(getenv("MAKU_PPM"), "maku-voice");
+    }
+    return bad;
+}
+
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons();
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + screen();
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }
