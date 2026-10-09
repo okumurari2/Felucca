@@ -1216,7 +1216,8 @@ static void ui_input(void)
     if (home == BT_TAP && ui.menu) {                    /* HOME (pressed, or held) closes the menu, from ABOUT too; */
         menu_close();                                   /* the release of the hold that opened it is no tap */
         home = BT_NONE;                                 /* (menu_close went HOME already) */
-    } else if (home == BT_HOLD && maku_knobs_on()) {     /* HOME held: a new world */
+    } else if (home == BT_HOLD && maku_knobs_on() && !(fm1_in.buttons & (1u << panel.btn[B_OCTDN]))) {   /* HOME held: a new
+                                                         * world (with OCT- down: the settings menu, below) */
         maku_world_new();
         home = BT_NONE;
     } else if (home == BT_HOLD) {                       /* HOME held: open the menu, or leave it */

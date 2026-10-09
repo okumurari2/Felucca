@@ -60,16 +60,15 @@ static int setup(void)
     uint32_t i;
     ui_power_on();
     bad += check("MAKU is off at power-on", !maku.on);
-    menu_put(MI_MAKU, 1);
-    bad += check("MENU > MAKU ON: four tracks, lengths 16 / 57 / 13 / 29, patterns empty",
+    maku_setup();
+    bad += check("SETUP: four tracks, lengths 16 / 57 / 13 / 29, patterns empty",
                  maku.on && trk[0].p[P_SLEN] == 16 && trk[1].p[P_SLEN] == 57 && trk[2].p[P_SLEN] == 13 &&
                  trk[3].p[P_SLEN] == 29 && trk[0].eng_req == ENGI_DRUM && !trk[1].step[0].n && !trk[3].step[5].n);
-    bad += check("  the menu row reads ON", menu_get(MI_MAKU) == 1u && !str_eq(menu_vname(MI_MAKU, 1), "OFF"));
     midi_control(0, 20, 100);
     bad += check("  CC20 sets DENSITY", maku.dens == 100u);
     midi_control(0, 20, 0);
     bad += check("  CC20 0 -> DENSITY 0", maku.dens == 0u);
-    menu_put(MI_MAKU, 0);
+    maku.on = 0;
     midi_control(0, 20, 90);
     bad += check("MAKU OFF: CC20 does nothing, the stored steps play again", !maku.on && maku.dens == 0u);
     ui_power_on();

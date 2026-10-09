@@ -256,7 +256,7 @@ static void midi_control(uint32_t ch, uint32_t cc, uint32_t value)
     switch (cc) {
     case 20:                                       /* MAKU (maku.c): DENSITY */
         if (maku.on)
-            maku_set_density(value);
+            maku_macro_set(MAKU_KICK, 0, value);
         break;
     case 1:
         c->wheel = (uint8_t)value;
