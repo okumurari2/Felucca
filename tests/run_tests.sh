@@ -35,6 +35,9 @@
 #                   (1.2: when it writes, the power-on restore, damaged copies, a write cut short, wear over a session),
 #                   malformed transfers, transport-stop timeouts, MIDI and UART recovery; the MENU settings over the
 #                   editor (MENU_DESC / MENU_SET: every item, clamping, unknown ids, saving, USB SERIAL applied later).
+# MAKU (tests/maku_test.c): the interlude mode (src/maku.c): MENU > MAKU and CC20, the kick's rungs against DENSITY, the
+#                   57- and 13-step drones, only scale notes (16 scales), the arp's runs and its tidy/loose table, the kick's
+#                   TUNE following ROOT, the ducking; tests/regress.c cpu/mix/maku_127 is its CPU cost.
 # CHORD (tests/chord_test.c): the chord keys (src/chord.c): diatonic triads / sevenths of several scales and roots,
 #                   the fixed shapes and voicings (at most 4 notes), names, MONO plays the root, a release ends
 #                   exactly what its key / MIDI note started, recording, the ARP, MIDI IN, kits ignore CHRD.
@@ -173,6 +176,8 @@ if [ -f build/gen/felucca_tables.h ]; then
     run "motion, whole-step chance, FUN7 migration, song restore, ARP repeat and the 1.2 ARP modes" "$OUT/motion_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/ratchet_test" tests/ratchet_test.c -lm
     run "RATCH: x1..x4 in a step (notes, chords, drum hits), gates, chance, swing, projects, user presets, CHANCE page" "$OUT/ratchet_test"
+    $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/maku_test" tests/maku_test.c -lm
+    run "MAKU: DENSITY rungs of the kick, 57 / 13-step drones, scale-only notes, arp runs, kick follows ROOT, ducking" "$OUT/maku_test"
     $CC -O1 -w -Ibuild/gen -Ifirmware/src -o "$OUT/midi_control_test" tests/midi_control_test.c -lm
     run "USB/TRS clock, bend, sustain, ownership and panic recovery" "$OUT/midi_control_test"
     $CC -O1 -w -DFELUCCA_FM4=1 -Ibuild/gen -Ifirmware/src -o "$OUT/digital_test" tests/digital_test.c -lm

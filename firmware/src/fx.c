@@ -335,6 +335,7 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
 /* one block of the whole mix (shared with hostsim.c): events -> each part (with its modulation matrix)
  * -> dist -> SLICER -> level / pan / sends -> buses -> master; out: stereo Q15 */
 static void events_block(uint32_t n);                    /* seq.c */
+static int32_t maku_gain(uint32_t i);                    /* maku.c: the kick's dip of a track's level, Q12 */
 static int32_t send_c[CTL], send_d[CTL], send_r[CTL], wet[CTL], mix_l[CTL], mix_r[CTL];
 
 /* one synth part into the dry mix and the sends; a part with no voice sounding costs
@@ -354,6 +355,7 @@ static void mix_part(track_t *t, uint32_t n)
     }
     {
         int32_t lvl = LEVEL_Q12[t->p[P_LEVEL] & 127], pan = t->p[P_PAN];
+        lvl = (lvl * maku_gain((uint32_t)(t - trk))) >> 12;   /* (LEVEL_Q12 * Q12 fits 32 bits; x1.0 exact) */
         int32_t gl = 4096 - (pan > 0 ? pan * 64 : 0), gr = 4096 + (pan < 0 ? pan * 64 : 0);
         int32_t c = t->p[P_CHOR] * 258, d = t->p[P_DLY] * 258, r = t->p[P_REV] * 258, pk = t->peak;
         int32_t xmax = c > d ? c : d;

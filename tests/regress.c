@@ -322,6 +322,40 @@ static uint64_t instr_now(void)
 #endif
     return 0;
 }
+/* MAKU (maku.c) at DENSITY 127: the kick, two drones and the arp played by the sequencer inside mix_block (events_block),
+ * the voices it really starts; the cost of the whole interlude mode, ducking included */
+static void job_cpu_maku(void)
+{
+    static const uint8_t ROLE[NPART][4] = {{ENGI_DRUM, 0, 16, 0}, {0, 1, MAKU_DRA_LEN, 0}, {0, 3, MAKU_DRB_LEN, 0}, {0, 5, 16, 0}};
+    uint32_t p, k, nb = FS / CTL;
+    uint64_t i0 = 0, t0 = 0;
+    host_tracks_init();
+    for (p = 0; p < NPART; p++) {
+        host_preset(&trk[p], ROLE[p][0], ROLE[p][1]);
+        trk[p].p[P_SLEN] = ROLE[p][2];
+        trk[p].p[P_SDIV] = 2;
+        trk[p].p[P_SCALE] = 2;
+        trk[p].p[P_AMODE] = 0;
+        if (p == MAKU_DRA || p == MAKU_DRB) {
+            trk[p].p[P_ATK] = 90;
+            trk[p].p[P_REL] = 120;
+        }
+    }
+    song.g[G_BPM] = 72;
+    maku.on = 1;
+    maku_set_density(127);
+    seq_start();
+    for (k = 0; k < 8u * nb; k++) {                     /* 8 s (about 2.4 bars at 72 BPM), the last 6 s counted */
+        if (k == 2u * nb) {
+            i0 = instr_now();
+            t0 = now_ns();
+        }
+        mix_block(last_out, CTL);
+    }
+    R.ns = (double)(now_ns() - t0) / (6u * nb * CTL);
+    R.ipc = i0 ? (double)(instr_now() - i0) / (6u * nb * CTL) : 0;
+}
+
 static void job_cpu(const job_t *j)
 {
     static const uint8_t NOTES[8] = {48, 52, 55, 59, 60, 64, 67, 71};
@@ -329,6 +363,10 @@ static void job_cpu(const job_t *j)
     const uint8_t (*parts)[3] = j->parts;
     uint32_t p, i, k, nb = FS / CTL, drums_on = parts[3][2] == DRUM_HITS;
     uint64_t i0, t0;
+    if (j->e == 0xFD) {
+        job_cpu_maku();
+        return;
+    }
     host_tracks_init();
     for (p = 0; p < NPART; p++) {
         host_preset(&trk[p], parts[p][0], parts[p][1]);
@@ -1121,6 +1159,12 @@ int main(int argc, char **argv)
         j->e = ENGI_DRUM;
         j->pi = 0;
         j->arg = (uint8_t)(DK_80 + i);
+    }
+    {   /* MAKU at DENSITY 127 (job_cpu_maku): the whole interlude mode, not subtracted from anything */
+        job_t *j = add(J_CPU, "cpu/mix/maku_127");
+        memset(cpu_parts[ncpu], 0, sizeof cpu_parts[ncpu]);
+        j->parts = (const uint8_t (*)[3])cpu_parts[ncpu++];
+        j->e = 0xFD;
     }
     {   /* mixes: idle (subtracted from the presets' counts), idle + drums (part 4 DRUM; SAMPLE PERC until 1.0.2), FM (DIGITAL with
          * FELUCCA_FM4, else FM6) + PHASE + VOICE asking 8 + 8 + 4 + the drums (the budget keeps 8; FM6 plays 6) */

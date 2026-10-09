@@ -1338,6 +1338,13 @@ static void ui_input(void)
             ui.hot_col = (uint8_t)k;
             ui.hot_t = 40;
         }
+        if (ui.home && maku.on && k == 0u) {            /* MAKU (maku.c): HOME's KNOB 1 is DENSITY, the one macro */
+            char b[8];
+            maku_set_density((uint32_t)clamp((int32_t)maku.dens + accel(EN_K1, s, 127), 0, 127));
+            fmt_int(b, maku.dens);
+            ui_say("DENSITY ", b);
+            continue;
+        }
         if (ui.home) {
             int16_t *vp;
             const param_desc_t *d = home_param(k, &vp);

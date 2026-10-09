@@ -7,14 +7,14 @@
  * USB LEVEL; 1.1: CLICK, CLICK LEVEL, COUNT-IN), USB SERIAL, RESTORE LAST (1.2), then CALIBRATION (the setup screen: HARDWARE CALIBRATION) and ABOUT, the two rows with no
  * value (MI_VALUES: the rows before them hold one). 1.0.5: in four tabs (MI_TAB). */
 enum { MI_COLOR, MI_STYLE, MI_LARGE, MI_ANIM, MI_LEDS, MI_SCROFF, MI_HOLD, MI_ACCEL, MI_LATCH, MI_BPMLOCK, MI_SCLLED, MI_LOWCUT, MI_USB,
-       MI_CLICK, MI_CLKLVL, MI_COUNTIN, MI_SERIAL, MI_RESTORE, MI_PANEL, MI_ABOUT, MI_COUNT };   /* (1.1: the metronome's rows in
+       MI_CLICK, MI_CLKLVL, MI_COUNTIN, MI_SERIAL, MI_RESTORE, MI_MAKU, MI_PANEL, MI_ABOUT, MI_COUNT };   /* (1.1: the metronome's rows in
                                                                                              * AUDIO; 1.2: RESTORE LAST in SYSTEM, SCALE LEDS
                                                                                              * in CONTROL) */
 #define MI_VALUES MI_PANEL
 static const char *const MI_NAME[MI_COUNT] = {"COLOR", "STYLE", "LARGE", "ANIM", "LEDS", "SCREEN OFF", "HOLD", "KNOB ACCEL", "FX LATCH", "BPM LOCK",
                                               "SCALE LEDS",
                                               "SPEAKER EQ", "USB LEVEL", "CLICK", "CLICK LEVEL", "COUNT-IN", "USB SERIAL",
-                                              "RESTORE LAST", "CALIBRATION", "ABOUT"};
+                                              "RESTORE LAST", "MAKU", "CALIBRATION", "ABOUT"};
 /* 1.0.5: the MENU's tabs (ui_menu.c: ALGORITHM steps between them, PRESETS among one tab's rows; the editor gets a
  * row's tab after its MENU_DESC reply). A tab's rows follow each other in MI order (tests/ui_test.c checks it); at
  * most MTAB_ROWS each (the page does not scroll: ui_menu.c fits them). A new row joins a tab here, a new tab is
@@ -29,7 +29,7 @@ static const uint8_t MI_TAB[MI_COUNT] = {
     MTAB_CONTROL,                                                           /* SCALE LEDS (1.2) */
     MTAB_AUDIO, MTAB_AUDIO, MTAB_AUDIO, MTAB_AUDIO, MTAB_AUDIO,             /* SPEAKER EQ, USB LEVEL, CLICK, CLICK LEVEL,
                                                                              * COUNT-IN */
-    MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM,                     /* USB SERIAL, RESTORE LAST, CALIBRATION,
+    MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM, MTAB_SYSTEM,           /* USB SERIAL, RESTORE LAST, MAKU, CALIBRATION,
                                                                              * ABOUT */
 };
 typedef char mtab_fits_ui[sizeof ui.menu_row >= MTAB_COUNT ? 1 : -1];   /* (ui.c: the row last picked per tab) */
@@ -124,6 +124,7 @@ static uint32_t menu_get(uint32_t row)
     case MI_LOWCUT: return settings.lowcut % 3u;
     case MI_HOLD: return settings_hold % 4u;
     case MI_SCROFF: return scr_get();
+    case MI_MAKU: return maku.on;
     case MI_CLICK: case MI_CLKLVL: case MI_COUNTIN: return rp_get(row - MI_CLICK);
     case MI_LEDS:
         while (i + 1u < LEDS_COUNT && LEDS_MENU[i] != settings_leds)
@@ -147,6 +148,7 @@ static const char *menu_vname(uint32_t row, uint32_t v)
     case MI_COUNTIN: return COUNTIN_N[v % 3u];
     case MI_SCROFF: return SCROFF_N[v % NELEM(SCROFF_N)];
     case MI_LEDS: return LEDS_NAME[LEDS_MENU[v % LEDS_COUNT]];
+    case MI_MAKU: return v ? "ON" : "OFF";
     }
     return "";
 }
@@ -175,6 +177,12 @@ static void menu_put(uint32_t row, uint32_t v)
     case MI_HOLD: settings_hold = (uint8_t)v; break;
     case MI_SCROFF: scr_put(v); break;                 /* (read every frame: ui.c scr_frame) */
     case MI_LEDS: settings_leds = LEDS_MENU[v]; break;
+    case MI_MAKU:                                      /* the interlude mode (maku.c): not saved, ON sets the tracks up */
+        if (v && !maku.on)
+            maku_setup();
+        else if (!v)
+            maku.on = 0;
+        break;
     case MI_CLICK: case MI_CLKLVL: case MI_COUNTIN: rp_put(row - MI_CLICK, v); break;   /* (at once: click.c, seq.c) */
     }
 }

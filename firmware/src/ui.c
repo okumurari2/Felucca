@@ -1104,6 +1104,48 @@ static void set_engine_of(track_t *t, uint32_t ei)
 }
 
 static void apply_preset(uint32_t pi) { apply_preset_to(TSEL, pi); }
+
+/* MENU > MAKU ON (maku.c): the four tracks become KICK, DRONE (57 steps), DRONE (13) and ARP, each with a sound of its
+ * own, patterns emptied (maku_step plays them), the key MINOR on C, the tempo 72. MAKU off leaves the sounds as they are */
+static void maku_setup(void)
+{
+    static const struct { uint8_t eng, pre, len, lvl, rev, dly; } R[NTRK] = {
+        {ENGI_DRUM, 0, 16, 104, 30, 0}, {0, 1, MAKU_DRA_LEN, 84, 90, 20}, {0, 3, MAKU_DRB_LEN, 70, 100, 30}, {0, 5, 16, 80, 70, 60},
+    };
+    uint32_t i;
+    for (i = 0; i < NTRK; i++) {
+        track_t *t = &trk[i];
+        set_engine_of(t, R[i].eng);
+        if (R[i].eng != ENGI_DRUM)
+            apply_preset_to(t, R[i].pre);
+        memset(t->step, 0, sizeof t->step);
+        t->seq_active = 0;
+        t->p[P_SLEN] = R[i].len;
+        t->p[P_SDIV] = 2;                         /* 1/16 */
+        t->p[P_SSWING] = 0;
+        t->p[P_AMODE] = 0;
+        t->p[P_QUANT] = 0;
+        t->p[P_MUTE] = 0;
+        t->p[P_ROOT] = 0;
+        t->p[P_SCALE] = 2;                        /* MIN */
+        t->p[P_LEVEL] = R[i].lvl;
+        t->p[P_REV] = R[i].rev;
+        t->p[P_DLY] = R[i].dly;
+        if (i == MAKU_DRA || i == MAKU_DRB) {     /* the drones ring on: slow attack, a long release */
+            t->p[P_ATK] = 90;
+            t->p[P_REL] = 120;
+            t->p[P_VOICE] = V_POLY;
+        }
+    }
+    song.g[G_BPM] = 72;
+    maku.on = 1;
+    maku.dens = 0;
+    maku.run_left = 0;
+    maku.root = 0;
+    maku.scale = 2;
+    maku_follow();
+    maku_apply();
+}
 static void set_engine(uint32_t ei) { set_engine_of(TSEL, ei); }
 
 static void track_defaults(track_t *t)

@@ -78,6 +78,8 @@ static int32_t scale_snap(const track_t *t, int32_t n)
 
 enum { QN_OFF, QN_SNAP, QN_WHITE, QN_SEQ };      /* P_QUANT */
 
+#include "maku.c"                                  /* the interlude mode: DENSITY joins a drone, a kick and an arp */
+
 static uint32_t kb_map(const track_t *t, uint32_t k)
 {
     static const int8_t DEGREE[12] = {0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6};
@@ -827,7 +829,13 @@ static void seq_tick(track_t *t, uint32_t n)
         rec_hold(t, t->seq_idx, len ? len : 1u);
         {
             const step_t *s = &seq_steps(t)[t->seq_idx];
+            step_t ms;
             uint32_t skip = SEQ_ROLLED, i, k;
+            if (maku.on) {                              /* MAKU: its own step instead of the stored one (an empty
+                                                         * step is a rest: seq_step releases the track's notes) */
+                maku_step(trk_index(t), t->seq_idx, &ms);
+                s = &ms;
+            }
             /* the chance first (the one roll, as seq_step made it): a step that does not play applies no lock; the
              * automation and the locks before the notes, so a note-on reads them (eng_drum's KIT, ..) */
             if (step_chance(s) < 100u && rng() % 100u >= step_chance(s))
@@ -1036,6 +1044,7 @@ static void events_block(uint32_t n)
         }
     }
     chain_tick(seq_n);
+    maku_block();
     for (i = 0; i < NTRK; i++)
         seq_tick(&trk[i], seq_n);
     if (cin_flush)
