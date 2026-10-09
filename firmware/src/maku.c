@@ -265,6 +265,8 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         {
             const uint8_t *c = MAKU_CHORD[(idx / 19u + 3u * maku.cyc_a) % 6u];   /* (3 a cycle: six chords in two cycles) */
             uint32_t k, nv = 2u + maku.open / 43u;       /* OPEN: 2 voices .. root, 5th, octave and the 9th above */
+            if (nv > 3u && d >= 90u)
+                nv = 3u;                                /* (dense and open: the voices run out) */
             for (k = 0; k < 3u && k < nv; k++)
                 out->note[k] = (uint8_t)maku_note(t, c[k], 36u);
             if (nv > 3u)

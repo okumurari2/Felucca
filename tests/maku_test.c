@@ -575,9 +575,49 @@ static int screen(void)
     return bad;
 }
 
+static int worlds_voices(void)
+{
+    int bad = 0;
+    int32_t o[2u * CTL];
+    uint32_t b, i, k, nb = 6u * BAR_STEPS * step_blocks(), act, steals = 0, seed, maxact = 0, presets_seen = 0;
+    uint8_t seen[3][16] = {{0}};
+    for (seed = 1; seed <= 12u; seed++) {
+        start(127);
+        maku_world(seed * 7919u);
+        for (i = 1; i < 4u; i++)
+            seen[i - 1u][trk[i].preset & 15u] = 1;
+        maku_macro_set(MAKU_DRA, 0, 127);
+        maku_macro_set(MAKU_ARP, 0, 127);
+        maku_set_density(127);
+        for (i = 0; i < NTRK; i++)
+            trk[i].engine = trk[i].eng_req;
+        for (b = 0; b < nb; b++) {
+            uint32_t v0 = vage, before = 0;
+            for (i = 0; i < NTRK; i++)
+                for (k = 0; k < NVOICE; k++)
+                    before += trk[i].v[k].active != 0;
+            memset(o, 0, sizeof o);
+            mix_block(o, CTL);
+            act = 0;
+            for (i = 0; i < NTRK; i++)
+                for (k = 0; k < NVOICE; k++)
+                    act += trk[i].v[k].active != 0;
+            maxact = act > maxact ? act : maxact;
+            steals += before >= NVOICE && vage > v0;
+        }
+    }
+    for (i = 0; i < 3u; i++)
+        for (k = 0; k < 16u; k++)
+            presets_seen += seen[i][k];
+    printf("ui:   12 worlds at DENSITY 127, OPEN and LOOSE 127: most voices at once %u, steals %u, %u distinct presets over the three voices\n",
+           maxact, steals, presets_seen);
+    bad += check("WORLDS: the voices change from world to world (>= 6 presets seen) and never run out of voices", presets_seen >= 6u && steals == 0u);
+    return bad;
+}
+
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + screen();
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + screen() + worlds_voices();
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }

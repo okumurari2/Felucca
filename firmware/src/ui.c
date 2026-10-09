@@ -1112,45 +1112,49 @@ static void apply_preset(uint32_t pi) { apply_preset_to(TSEL, pi); }
 
 /* MENU > MAKU ON (maku.c): the four tracks become KICK, DRONE (57 steps), DRONE (13) and ARP, each with a sound of its
  * own, patterns emptied (maku_step plays them), the key MINOR on C, the tempo 72. MAKU off leaves the sounds as they are */
+static const struct { uint8_t eng, pre, len, lvl, rev, dly; } MAKU_R[NTRK] = {
+    {ENGI_DRUM, 0, 16, 104, 30, 0},                    /* KICK: a long round one */
+    {ENGI_PHYS, 7, MAKU_DRA_LEN, 90, 100, 20},         /* DRONE: PHYS DRONE STRING */
+    {8, 0, MAKU_DRB_LEN, 76, 110, 30},                 /* SHIMMER: GRAIN CLOUD PAD */
+    {ENGI_PHYS, 4, MAKU_ARP_LEN, 78, 85, 70},          /* ARP: PHYS KALIMBA, into the delay and the room */
+};
+/* track i's sound: its engine and preset `pre`, the pattern emptied (maku_step plays it), and the part's own settings */
+static void maku_sound(uint32_t i, uint32_t pre)
+{
+    track_t *t = &trk[i];
+    set_engine_of(t, MAKU_R[i].eng);
+    if (MAKU_R[i].eng != ENGI_DRUM)
+        apply_preset_to(t, pre);
+    memset(t->step, 0, sizeof t->step);
+    t->seq_active = 0;
+    t->p[P_SLEN] = MAKU_R[i].len;
+    t->p[P_SDIV] = 2;                         /* 1/16 */
+    t->p[P_SSWING] = 0;
+    t->p[P_AMODE] = 0;
+    t->p[P_QUANT] = 0;
+    t->p[P_MUTE] = 0;
+    t->p[P_ROOT] = 0;
+    t->p[P_SCALE] = 2;                        /* MIN */
+    t->p[P_LEVEL] = MAKU_R[i].lvl;
+    t->p[P_REV] = MAKU_R[i].rev;
+    t->p[P_DLY] = MAKU_R[i].dly;
+    t->p[P_VOICE] = V_POLY;
+    if (i == MAKU_KICK) {                     /* a round, low, long kick: KICK ROUND, TONE down, DECY up, SNAP down */
+        t->p[P_E2] = 40;
+        t->p[P_E3] = 110;
+        t->p[P_E4] = 20;
+        t->p[P_E6] = 1;
+    }
+    if (i == MAKU_DRB)                        /* the shimmer fades in */
+        t->p[P_ATK] = 90;
+    if (i != MAKU_KICK)                       /* and every held sound rings on after its short gate */
+        t->p[P_REL] = i == MAKU_ARP ? 50 : 70;   /* (measured: tails this long keep the four parts under 8 voices) */
+}
 static void maku_setup(void)
 {
-    static const struct { uint8_t eng, pre, len, lvl, rev, dly; } R[NTRK] = {
-        {ENGI_DRUM, 0, 16, 104, 30, 0},                    /* KICK: a long round one */
-        {ENGI_PHYS, 7, MAKU_DRA_LEN, 90, 100, 20},         /* DRONE: PHYS DRONE STRING */
-        {8, 0, MAKU_DRB_LEN, 76, 110, 30},                 /* SHIMMER: GRAIN CLOUD PAD */
-        {ENGI_PHYS, 4, MAKU_ARP_LEN, 78, 85, 70},          /* ARP: PHYS KALIMBA, into the delay and the room */
-    };
     uint32_t i, j;
-    for (i = 0; i < NTRK; i++) {
-        track_t *t = &trk[i];
-        set_engine_of(t, R[i].eng);
-        if (R[i].eng != ENGI_DRUM)
-            apply_preset_to(t, R[i].pre);
-        memset(t->step, 0, sizeof t->step);
-        t->seq_active = 0;
-        t->p[P_SLEN] = R[i].len;
-        t->p[P_SDIV] = 2;                         /* 1/16 */
-        t->p[P_SSWING] = 0;
-        t->p[P_AMODE] = 0;
-        t->p[P_QUANT] = 0;
-        t->p[P_MUTE] = 0;
-        t->p[P_ROOT] = 0;
-        t->p[P_SCALE] = 2;                        /* MIN */
-        t->p[P_LEVEL] = R[i].lvl;
-        t->p[P_REV] = R[i].rev;
-        t->p[P_DLY] = R[i].dly;
-        t->p[P_VOICE] = V_POLY;
-        if (i == MAKU_KICK) {                     /* a round, low, long kick: KICK ROUND, TONE down, DECY up, SNAP down */
-            t->p[P_E2] = 40;
-            t->p[P_E3] = 110;
-            t->p[P_E4] = 20;
-            t->p[P_E6] = 1;
-        }
-        if (i == MAKU_DRB)                        /* the shimmer fades in */
-            t->p[P_ATK] = 90;
-        if (i != MAKU_KICK)                       /* and every held sound rings on after its short gate */
-            t->p[P_REL] = i == MAKU_ARP ? 50 : 70;   /* (measured: tails this long keep the four parts under 8 voices) */
-    }
+    for (i = 0; i < NTRK; i++)
+        maku_sound(i, MAKU_R[i].pre);
     trk[MAKU_DRA].p[P_LRATE] = 36;                    /* SWAY's slow LFO on the drone's filter */
     for (i = 0; i < 4u; i++)
         for (j = 0; j < 3u; j++)
@@ -1179,6 +1183,14 @@ static void maku_world(uint32_t seed)
     rng_state = seed ? seed : 0x1234567u;
     for (i = 0; i < 4u; i++)
         (void)rng();                                          /* (a xorshift shows its seed for a few draws) */
+    {   /* the voices: a few presets of each part's engine that suit it (PHYS: 0 BELL TREE, 1 MARIMBA, 2 PLUCK, 3 BOWED
+         * METAL, 4 KALIMBA, 7 DRONE STRING, 8 HARP; GRAIN: 0 CLOUD PAD, 2 FROZEN, 3 SHIMMER) */
+        static const uint8_t DRA[] = {7, 8, 3}, DRB[] = {0, 2, 3}, ARP[] = {4, 1, 2, 0, 8};
+        maku_sound(MAKU_DRA, DRA[rng() % sizeof DRA]);
+        maku_sound(MAKU_DRB, DRB[rng() % sizeof DRB]);
+        maku_sound(MAKU_ARP, ARP[rng() % sizeof ARP]);
+        trk[MAKU_DRA].p[P_LRATE] = 36;
+    }
     trk[MAKU_DRA].p[P_ROOT] = (int16_t)(rng() % 12u);
     trk[MAKU_DRA].p[P_SCALE] = SC[rng() % sizeof SC];
     maku_follow();
