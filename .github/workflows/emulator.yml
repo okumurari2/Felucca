@@ -30,7 +30,7 @@ jobs:
       - name: Generate headers
         run: python3 -c "import sys; sys.path.insert(0, 'tools'); import build; build.generate()"
       - name: Build the emulator
-        run: web/emu/build.sh
+        run: sh web/emu/build.sh
       - name: Check it boots
         run: node web/emu/emu_test.mjs
         continue-on-error: true
