@@ -257,6 +257,15 @@ static void web_power_on(void)
     audio_init();
     boot_leds();                          /* main.c: the power-on LED sweep, from the scan's start */
     autosave_boot(boot_clean);            /* main.c: the last session's music (1.2, project.c) */
+    {   /* the browser's first visit has nothing to play: PLAY would be silent. Four factory patterns (ACID, PAD, MELODY on
+         * the synth parts, BEAT on the drums) go in when every sequencer is empty; a kept session is left alone */
+        static const uint8_t DEMO[NTRK] = {0, 4, 2, 11};
+        uint32_t i, empty = 1;
+        for (i = 0; i < NTRK; i++)
+            empty &= (uint32_t)seq_is_empty(&trk[i]);
+        for (i = 0; empty && i < NTRK; i++)
+            pat_load(&trk[i], DEMO[i]);
+    }
     web_boot_ms = fm1_ms + 430u;         /* main.c: 30 + 400 ms before the first frame */
     web_booted = 1;
 }
