@@ -94,6 +94,59 @@ static uint32_t maku_kick_chance(uint32_t idx, uint32_t d)
     return 0u;
 }
 
+/* the kick's pattern, set by hand: bit i = step i of 16 holds a kick (lane 0) in the track's stored steps */
+static uint32_t maku_kick_mask(void)
+{
+    uint32_t i, m = 0;
+    for (i = 0; i < 16u; i++)
+        m |= (step_lanes(&trk[MAKU_KICK].step[i]) & 1u) << i;
+    return m;
+}
+static uint32_t maku_kick_accents(void)
+{
+    uint32_t i, m = 0;
+    for (i = 0; i < 16u; i++)
+        m |= (step_accents(&trk[MAKU_KICK].step[i]) & 1u) << i;
+    return m;
+}
+/* the steps DENSITY can add as a ghost now (not stored): bit i = chance above 0 */
+static uint32_t maku_kick_ghosts(void)
+{
+    uint32_t i, m = 0;
+    for (i = 0; i < 16u; i++)
+        m |= (uint32_t)(maku_kick_chance(i, maku.dens) > 0u) << i;
+    return m & ~maku_kick_mask();
+}
+
+/* the black keys on the kick's grid: what a pattern of 16 becomes (bit i = step i). Pure: the caller stores it */
+enum { KO_LEFT, KO_RIGHT, KO_INVERT, KO_THIN, KO_ADD, KO_FOUR, KO_OFF, KO_CLEAR, KO_N };
+static uint32_t maku_kick_op(uint32_t m, uint32_t op, uint32_t r)
+{
+    uint32_t i, n, pick;
+    m &= 0xFFFFu;
+    switch (op) {
+    case KO_LEFT: return ((m >> 1) | (m << 15)) & 0xFFFFu;
+    case KO_RIGHT: return ((m << 1) | (m >> 15)) & 0xFFFFu;
+    case KO_INVERT: return ~m & 0xFFFFu;
+    case KO_FOUR: return 0x1111u;                   /* steps 1 5 9 13: four on the floor */
+    case KO_OFF: return 0x4444u;                    /* steps 3 7 11 15: the off-beat */
+    case KO_CLEAR: return 0;
+    case KO_THIN:                                   /* one hit fewer, at random */
+    case KO_ADD:                                    /* one more */
+        n = (uint32_t)__builtin_popcount(op == KO_THIN ? m : ~m & 0xFFFFu);
+        if (!n)
+            return m;
+        pick = r % n;
+        for (i = 0; i < 16u; i++)
+            if (((op == KO_THIN ? m : ~m) >> i) & 1u) {
+                if (!pick--)
+                    return m ^ (1u << i);
+            }
+        return m;
+    }
+    return m;
+}
+
 /* the step track i plays at idx, in place of its stored one. 0 = rest */
 static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, step_t *out)
 {
@@ -103,7 +156,20 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
     out->time = ST_NOTE;
     switch (i) {
     case MAKU_KICK:
-        if (idx >= 16u || (uint32_t)(rng() % 100u) >= maku_kick_chance(idx, d))
+        if (idx >= 16u)
+            return 0;
+        if ((maku_kick_mask() >> idx) & 1u) {       /* a step set by hand (the grid) always plays; DENSITY only adds ghosts */
+            vel = 96u + ((step_accents(&t->step[idx]) & 1u) ? 24u : 0u);
+            out->hit = 1u;
+            out->vel = (uint8_t)(vel > 127u ? 127u : vel);
+            if (d >= 40u) {
+                int32_t dip = 4096 - (int32_t)((d - 40u) * 1800u / 87u);
+                if (dip < maku.duck)
+                    maku.duck = dip;
+            }
+            return 1;
+        }
+        if ((uint32_t)(rng() % 100u) >= maku_kick_chance(idx, d))
             return 0;
         vel = 30u + d * 80u / 127u;
         if (idx == 0 && d >= 40u)

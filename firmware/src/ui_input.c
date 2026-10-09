@@ -78,7 +78,7 @@ static uint32_t grid_leds(void)
             on = i < len && ((acc ? step_accents(&seq_steps(t)[i]) : step_lanes(&seq_steps(t)[i])) & b) != 0u;
             on ^= (uint32_t)(p == ph);
         } else {
-            on = p < NLANE ? p == ui.lane : p == GK_ACC ? acc : len > 16u;
+            on = maku_kick_grid() ? p == GK_ACC && acc : p < NLANE ? p == ui.lane : p == GK_ACC ? acc : len > 16u;
         }
         m |= on << k;
     }
@@ -111,7 +111,7 @@ static uint32_t grid_glow(void)
     uint32_t k, m = 0, len = (uint32_t)TSEL->p[P_SLEN];
     for (k = 0; k < 27u; k++) {
         uint32_t p = key_place(k);
-        m |= (uint32_t)(!key_black(k) ? ui.bank * 16u + p < len : p < NLANE || p == GK_ACC || len > 16u) << k;
+        m |= (uint32_t)(!key_black(k) ? ui.bank * 16u + p < len : p < NLANE || p == GK_ACC || (len > 16u && !maku_kick_grid())) << k;
     }
     return m;
 }
@@ -486,10 +486,23 @@ static void grid_edit(uint32_t slot, int32_t steps)
 static void grid_keys(uint32_t pressed)
 {
     uint32_t k, len = (uint32_t)TSEL->p[P_SLEN];
+    uint32_t mk = (uint32_t)maku_kick_grid();
+    if (mk) {                                           /* the kick: one lane, 16 steps, no pages */
+        ui.lane = 0;
+        ui.bank = 0;
+    }
     for (k = 0; k < 27u; k++) {
         uint32_t p = key_place(k);
         if (!((pressed >> k) & 1u))
             continue;
+        if (mk && key_black(k)) {                       /* black keys 1..8: what the pattern becomes (maku_kick_op) */
+            if (p < KO_N && !chain_busy()) {
+                uint32_t m = maku_kick_op(maku_kick_mask(), p, rng()), i;
+                for (i = 0; i < 16u; i++)
+                    grid_hit(TSEL, i, 0, (m >> i) & 1u);
+            }
+            continue;
+        }
         if (!key_black(k)) {
             uint32_t i = ui.bank * 16u + p;
             if (chain_busy()) { ui_message("STOP TO EDIT"); continue; }
@@ -1283,6 +1296,8 @@ static void ui_input(void)
             go_home();
     }
     song.grid = (uint8_t)keys_mode();                 /* (seq.c: the keys are the grid's) */
+    if (maku_kick_grid())
+        ui.lane = ui.bank = 0;                          /* (the kick's grid: lane 0, one page) */
 #if FELUCCA_SLICE
     if (notes && slice_page_on())                       /* SLICES: a key picks the slice it plays */
         slice_keys_pick(notes);

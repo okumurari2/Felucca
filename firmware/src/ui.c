@@ -467,7 +467,12 @@ static void step_clear(step_t *st)
  * down / up. KNOB 1 STEP, 2 LANE, 3 HIT, 4 ACC edit the cursor step. A sound load never converts the
  * steps: the grid shows a step's notes on their lanes (eng_drum.c step_lanes) and an edit makes the lane its
  * own (grid_own). Live recording on a DRUM track writes hits (seq.c rec_note) */
-static int grid_on(void) { return !ui.home && !ui.menu && !ui.confirm && cur_page()->graph == GR_ROLL && drum_track(TSEL); }   /* (STEP only: CHANCE is SC_STEP too) */
+/* AMBIENT.md: the kick's focus (the selected track) turns the keys into its 16 steps whatever the page */
+static int maku_kick_grid(void) { return maku.on && song.sel == MAKU_KICK && !ui.menu && !ui.confirm; }
+static int grid_on(void)
+{
+    return maku_kick_grid() || (!ui.home && !ui.menu && !ui.confirm && cur_page()->graph == GR_ROLL && drum_track(TSEL));   /* (STEP only: CHANCE is SC_STEP too) */
+}
 
 /* black key place p (seq.c key_place) held, 0 = not */
 static int black_held(uint32_t p)

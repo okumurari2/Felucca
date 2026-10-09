@@ -368,9 +368,52 @@ static int world(void)
     return bad;
 }
 
+static int kickgrid(void)
+{
+    int bad = 0;
+    uint32_t i, m, steps_ok = 1;
+    start(0);
+    song.sel = 0;
+    bad += check("KICKGRID: the kick selected: the keys are its grid, whatever the page", maku_kick_grid() && grid_on());
+    for (i = 0; i < 16u; i += 4u)
+        grid_hit(&trk[0], i, 0, 1);
+    bad += check("  white keys: steps 1 5 9 13 set", maku_kick_mask() == 0x1111u);
+    sim(32);
+    for (i = 0; i < nhits[0]; i++)
+        steps_ok &= (hits[0][i].step % 4u) == 0u;
+    bad += check("  DENSITY 0: exactly the set steps play, twice in 2 bars (8 hits)", nhits[0] == 8u && steps_ok);
+    start(127);
+    for (i = 0; i < 16u; i += 4u)
+        grid_hit(&trk[0], i, 0, 1);
+    grid_hit(&trk[0], 2, 0, 1);
+    sim(16 * 8);
+    m = 0;
+    for (i = 0; i < nhits[0]; i++)
+        m |= 1u << hits[0][i].step;
+    bad += check("  DENSITY 127: the set steps always play, the ghosts only add (never the stored mask shrinks)",
+                 (m & maku_kick_mask()) == maku_kick_mask() && maku_kick_mask() == 0x1115u);
+    bad += check("  ghosts are not stored", maku_kick_mask() == 0x1115u);
+    bad += check("  ghost map excludes the set steps", (maku_kick_ghosts() & maku_kick_mask()) == 0u);
+    bad += check("OPS: rotate", maku_kick_op(0x0001u, KO_LEFT, 0) == 0x8000u && maku_kick_op(0x8000u, KO_RIGHT, 0) == 0x0001u);
+    bad += check("  invert / four / off / clear", maku_kick_op(0x00FFu, KO_INVERT, 0) == 0xFF00u &&
+                 maku_kick_op(5, KO_FOUR, 0) == 0x1111u && maku_kick_op(5, KO_OFF, 0) == 0x4444u && maku_kick_op(5, KO_CLEAR, 0) == 0u);
+    {
+        uint32_t ok = 1, r;
+        for (r = 0; r < 40u; r++) {
+            uint32_t a = maku_kick_op(0x1111u, KO_ADD, r), b = maku_kick_op(0x1111u, KO_THIN, r);
+            ok &= __builtin_popcount(a) == 5 && (a & 0x1111u) == 0x1111u && __builtin_popcount(b) == 3 && (b & ~0x1111u) == 0u;
+        }
+        ok &= maku_kick_op(0, KO_THIN, 3) == 0 && maku_kick_op(0xFFFFu, KO_ADD, 3) == 0xFFFFu;
+        bad += check("  add one / thin one at random, nothing past empty or full", ok);
+    }
+    song.sel = 1;
+    bad += check("  another track selected: not the kick's grid", !maku_kick_grid());
+    return bad;
+}
+
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost();
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid();
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }
