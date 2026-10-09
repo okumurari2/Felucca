@@ -67,8 +67,6 @@ preset/FM6/04_PAD 8b5e174521125efe
 preset/FM6/05_MARIMBA 43ebdfc07f623036
 preset/FM6/06_ORGAN 121f5b1e3919a9f2
 preset/FM6/07_PLUCK d59a9c80d429b7ce
-preset/SLICE/00_CHOP 84124db8cbb8c408
-preset/SLICE/01_STUTTER 573b6860168f850f
 drums/drum_gm_kit bc9cd9164d3b95ef
 drums/kit_80 89e2ec776b708713
 drums/kit_10 b97a5c67df73116c
