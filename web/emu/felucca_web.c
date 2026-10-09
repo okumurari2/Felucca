@@ -257,14 +257,15 @@ static void web_power_on(void)
     audio_init();
     boot_leds();                          /* main.c: the power-on LED sweep, from the scan's start */
     autosave_boot(boot_clean);            /* main.c: the last session's music (1.2, project.c) */
-    {   /* the browser's first visit has nothing to play: PLAY would be silent. Four factory patterns (ACID, PAD, MELODY on
-         * the synth parts, BEAT on the drums) go in when every sequencer is empty; a kept session is left alone */
-        static const uint8_t DEMO[NTRK] = {0, 4, 2, 11};
+    {   /* the browser's first visit has nothing to play: MAKU (maku.c) goes on, at DENSITY 48 (a kick pulse over the
+         * drones), when every sequencer is empty; a kept session is left alone (MAKU is not stored: MENU > SYSTEM > MAKU) */
         uint32_t i, empty = 1;
         for (i = 0; i < NTRK; i++)
             empty &= (uint32_t)seq_is_empty(&trk[i]);
-        for (i = 0; empty && i < NTRK; i++)
-            pat_load(&trk[i], DEMO[i]);
+        if (empty) {
+            maku_setup();
+            maku_set_density(48);
+        }
     }
     web_boot_ms = fm1_ms + 430u;         /* main.c: 30 + 400 ms before the first frame */
     web_booted = 1;
@@ -448,6 +449,7 @@ EXPORT void web_test_heavy(void)
     static const uint8_t ENG[3][2] = {{12, 4}, {ENGI_PHYS, 7}, {8, 0}};
     static const uint8_t CH[4][4] = {{48, 55, 60, 64}, {45, 52, 57, 60}, {41, 48, 53, 57}, {43, 50, 55, 59}};
     uint32_t p, i;
+    maku.on = 0;                                   /* (the first-visit MAKU would play instead of this song) */
     for (p = 0; p < 3u; p++) {
         track_t *t = &trk[p];
         host_preset(t, ENG[p][0], ENG[p][1]);
