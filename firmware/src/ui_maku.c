@@ -8,7 +8,7 @@
  * GLO held (SELECT is the tempo): the top right shows BPM instead. One style for every mode. The scope is drawn each
  * frame, the other three only when something they show changes (or ui.force). */
 static int maku_knobs_on(void);
-#define MQ 119
+#define MKQ 119
 static const char *const MAKU_TRK_NAME[4] = {"PULSE", "FLOOR", "HAZE", "VOICE"};
 static const char *const MAKU_ROLE[3] = {"SELECT", "PRESETS", "ALGORITHM"};
 
@@ -28,8 +28,8 @@ static void mq_macro(uint32_t j, uint32_t f, uint32_t tempo)
     cv_text(8, 6, &AF_S, MAKU_ROLE[j], T_DIM);
     cv_text(8, 24, &AF_M, name, T_MID);
     fmt_int(b, v);
-    cv_text_in(0, 48, MQ, &AF_L, b, c, T_BG);
-    mq_gauge(8, 92, MQ - 16, tempo ? (v - 40) * 127 / 200 : v, c);
+    cv_text_in(0, 48, MKQ, &AF_L, b, c, T_BG);
+    mq_gauge(8, 92, MKQ - 16, tempo ? (v - 40) * 127 / 200 : v, c);
     if (!tempo && f == MAKU_KICK && j == 0) {           /* the kick's 16 steps: set, ghost, the playhead */
         uint32_t m = maku_kick_mask(), g = maku_kick_ghosts(), i, ph = song.playing ? trk[MAKU_KICK].seq_idx % 16u : 0xFFu;
         for (i = 0; i < 16u; i++) {
@@ -54,15 +54,15 @@ static void mq_top_left(void)
         else if (-snap[i] > peak)
             peak = -snap[i];
     }
-    for (i = 1; i < SCOPE_N - (uint32_t)MQ; i++)
+    for (i = 1; i < SCOPE_N - (uint32_t)MKQ; i++)
         if (snap[i - 1] < 0 && snap[i] >= 0) {
             trig = i;
             break;
         }
-    cv_begin(MQ, MQ, T_BG);
-    cv_rect(0, cy, MQ, 1, T_RAISE);
+    cv_begin(MKQ, MKQ, T_BG);
+    cv_rect(0, cy, MKQ, 1, T_RAISE);
     py = cy;
-    for (x = 0; x < MQ; x++) {
+    for (x = 0; x < MKQ; x++) {
         int32_t y = cy - snap[trig + (uint32_t)x] * a / peak;
         if (x)
             cv_line_t(x - 1, py, x, y, T_THEME, 2);
@@ -71,8 +71,8 @@ static void mq_top_left(void)
     fmt_int(b, song.g[G_BPM]);
     {
         int32_t bw = text_w(&AF_M, b);
-        cv_text(MQ - 6 - bw, 48, &AF_M, b, ui.bpm_t ? T_ACCENT : T_TEXT);
-        cv_text(MQ - 6 - bw - 4 - text_w(&AF_S, "BPM"), 52, &AF_S, "BPM", T_DIM);
+        cv_text(MKQ - 6 - bw, 48, &AF_M, b, ui.bpm_t ? T_ACCENT : T_TEXT);
+        cv_text(MKQ - 6 - bw - 4 - text_w(&AF_S, "BPM"), 52, &AF_S, "BPM", T_DIM);
     }
     for (i = 0; i < 4u; i++) {                          /* the four volumes, thin bars */
         int32_t bx = 12 + (int32_t)i * 26, h = trk[i].p[P_LEVEL] * 36 / 127;
@@ -103,7 +103,7 @@ static void maku_draw(void)
     if (ui.force || s != sig) {
         sig = s;
         for (j = 0; j < 3u; j++) {
-            cv_begin(MQ, MQ, T_BG);
+            cv_begin(MKQ, MKQ, T_BG);
             mq_macro(j, f, tempo && j == 0u);
             cv_blit(j == 1u ? 0u : 121u, j == 0u ? 0u : 121u);
         }
