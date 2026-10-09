@@ -97,7 +97,6 @@
 #if FELUCCA_OTA
 #include "ota.c"
 #include "ota_hw.c"
-#include "editor.c"              /* web editor SysEx (needs the OTA SysEx plumbing) */
 #endif
 #if FELUCCA_CDC
 #include "console.c"
