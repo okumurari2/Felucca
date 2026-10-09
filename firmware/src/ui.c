@@ -1159,6 +1159,9 @@ static void maku_setup(void)
     maku_macro_set(MAKU_ARP, 0, 0);
     song.g[G_BPM] = 72;
     maku.on = 1;
+    maku.rec = maku.riser = 0;
+    maku.rise_q = 0;
+    maku.pk_n = maku.pk_av = 0;
     maku.dens = 0;
     maku.run_left = 0;
     maku.root = 0;
@@ -1187,6 +1190,18 @@ static void maku_world(uint32_t seed)
         for (j = 0; j < 3u; j++)
             if (i || j)
                 maku_macro_set(i, j, i == MAKU_ARP && !j ? rng() % 40u : i == MAKU_DRA && !j ? 45u + rng() % 70u : 25u + rng() % 60u);
+}
+/* HOME held: a new world, from the time since boot and the knobs' last turns */
+static void maku_world_new(void)
+{
+    static uint32_t n;
+    uint32_t seed = fm1_ms * 0x9E3779B1u + ++n * 0x85EBCA6Bu;
+    maku_setup();
+    maku_world(seed);
+    perf_kill = 1;                                    /* (what was held lets go; the next pass clears it) */
+    perf_latched = 0;
+    ui_message("NEW WORLD");
+    ui.force = 1;
 }
 static void set_engine(uint32_t ei) { set_engine_of(TSEL, ei); }
 

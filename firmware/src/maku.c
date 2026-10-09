@@ -34,6 +34,10 @@ static struct {
     uint8_t run_left;            /* arp steps still to play from the table before it jumps */
     uint8_t pos;                 /* the place in the table */
     uint8_t cyc_a, cyc_b;        /* drone cycles done: the chord note rotates with them */
+    uint16_t rise_q;             /* SEQ held: the riser, Q8 of density added on top (0 .. 80) */
+    uint8_t riser;               /* SEQ is down */
+    uint8_t rec;                 /* REC is on: played notes are picked up by the arp phrase */
+    uint8_t pk[4], pk_n, pk_av;  /* the last notes played (ring of 4); bit i of pk_av: pk[i] is outside the scale */
     uint8_t open;                /* DRONE: OPEN 0..127: how many voices of the chord and how wide */
     uint8_t loose;               /* ARP: LOOSE 0..127: how much the phrase unravels and climbs */
     uint8_t m[4][3];             /* the macro of each track's SELECT / PRESETS / ALGORITHM, 0..127 */
@@ -201,11 +205,27 @@ static uint32_t maku_kick_op(uint32_t m, uint32_t op, uint32_t r)
     return m;
 }
 
+/* DENSITY as played: the knob plus the riser */
+static uint32_t maku_eff(void)
+{
+    uint32_t d = (uint32_t)maku.dens + (uint32_t)(maku.rise_q >> 8);
+    return d > 127u ? 127u : d;
+}
+
+/* a note played on the keys while REC is on (the scale's mask of the arp's track says if it is an avoid note) */
+static void maku_pick(uint32_t note)
+{
+    uint32_t m = scale_mask(&trk[MAKU_ARP]), i = maku.pk_n & 3u;
+    maku.pk[i] = (uint8_t)note;
+    maku.pk_av = (uint8_t)((maku.pk_av & ~(1u << i)) | ((((m >> ((note + 120u - (uint32_t)trk[MAKU_ARP].p[P_ROOT]) % 12u)) & 1u) ? 0u : 1u) << i));
+    maku.pk_n++;
+}
+
 /* the step track i plays at idx, in place of its stored one. 0 = rest */
 static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, step_t *out)
 {
     const track_t *t = &trk[i];
-    uint32_t d = maku.dens, vel;
+    uint32_t d = maku_eff(), vel;
     memset(out, 0, sizeof *out);
     out->time = ST_NOTE;
     switch (i) {
@@ -281,6 +301,15 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             maku.pos = (uint8_t)(rng() % MAKU_TABLE);
             maku.run_left = (uint8_t)(3u + rng() % (6u - d / 32u));
         }
+        if (maku.rec && maku.pk_n && (uint32_t)(rng() % 100u) < 35u) {   /* REC: the field picks up what was played; */
+            uint32_t j = rng() % (maku.pk_n < 4u ? maku.pk_n : 4u);       /* an avoid note is taken less often */
+            if (!((maku.pk_av >> j) & 1u) || (uint32_t)(rng() % 100u) < 35u) {
+                out->n = 1;
+                out->note[0] = maku.pk[j];
+                out->vel = (uint8_t)(52u + rng() % 20u);
+                return 1;
+            }
+        }
         maku.run_left--;
         deg = MAKU_PHRASE[maku.pos];
         maku.pos = (uint8_t)((maku.pos + 1u) % MAKU_TABLE);
@@ -331,6 +360,11 @@ static __attribute__((noinline)) void maku_block(void)
     uint32_t i;
     if (!maku.on)
         return;
+    if (maku.riser) {                                              /* SEQ held: about 5 s to +80, let go: a fall in 0.25 s */
+        maku.rise_q = (uint16_t)(maku.rise_q + 3u > 80u * 256u ? 80u * 256u : maku.rise_q + 3u);
+    } else {
+        maku.rise_q = (uint16_t)(maku.rise_q > 60u ? maku.rise_q - 60u : 0u);
+    }
     maku.duck += (4096 - maku.duck) / 160 + (maku.duck < 4096);   /* back up in ~120 ms (CTL blocks) */
     if (maku.duck > 4096)
         maku.duck = 4096;

@@ -102,7 +102,7 @@ static int tools_page(void)
     return !ui.home && pg->fam == FAM_SEQ &&
            (pg->graph == GR_ROLL || pg->graph == GR_STEPS || pg->graph == GR_CHANCE || pg->graph == GR_MOTION);
 }
-static int ly_avail(uint32_t l) { return l != LAYER_SEQ || tools_page(); }   /* (REC: on every page) */
+static int ly_avail(uint32_t l) { return (!maku.on || l == LAYER_GLO || l == LAYER_SCL) && (l != LAYER_SEQ || tools_page()); }   /* (MAKU: the other buttons are verbs, ui_input.c maku_buttons) */   /* (REC: on every page) */
 static uint32_t ly_down(uint32_t l) { return l && ((fm1_in.buttons & ly_bit(l)) != 0u || ui.lock == l); }   /* (locked: held) */
 static uint32_t layer_bits(void)
 {

@@ -1090,6 +1090,42 @@ static void maku_knobs(uint32_t glo)
     }
 }
 
+/* AMBIENT.md: the buttons are verbs. Held ones: FX freeze, ENV tape stop, LFO filter sweep, SAVE beat repeat, EDIT
+ * harmonizer + shimmer (all perform.c), PLAY pulls the kick out, SEQ the riser. Toggles: ARP, REC. HOME held: a new
+ * world. GLO and SCL keep their layers (tempo, root). Called once a pass with the buttons' state */
+static void maku_world_new(void);
+static void maku_buttons(uint32_t pressed, uint32_t notes)
+{
+    static uint32_t was;
+    static const struct { uint8_t b, e; } V[] = {
+        {B_FX, PF_FRZ}, {B_ENV, PF_TAPE}, {B_LFO, PF_LPF}, {B_SAVE, PF_R16}, {B_EDIT, PF_OUP}, {B_PLAY, PF_M1 + MAKU_KICK},
+    };
+    uint32_t i, k, down;
+    for (i = 0; i < NELEM(V); i++) {
+        down = (fm1_in.buttons >> panel.btn[V[i].b]) & 1u;
+        if (down != ((was >> i) & 1u)) {
+            perf_press(V[i].e, (int)down);
+            was ^= 1u << i;
+            if (V[i].b == B_EDIT)
+                perf_k[3] = (int8_t)(down ? 60 : 0);
+        }
+    }
+    maku.riser = (uint8_t)((fm1_in.buttons >> panel.btn[B_SEQ]) & 1u);
+    if ((pressed >> panel.btn[B_ARP]) & 1u) {
+        uint32_t on = !trk[0].p[P_AMODE];
+        for (i = 0; i < NTRK; i++)
+            trk[i].p[P_AMODE] = (int16_t)on;
+        ui_message(on ? "ARP ON" : "ARP OFF");
+    }
+    if ((pressed >> panel.btn[B_REC]) & 1u) {
+        maku.rec = (uint8_t)!maku.rec;
+        ui_message(maku.rec ? "REC ON" : "REC OFF");
+    }
+    for (k = 0; maku.rec && k < 27u; k++)                 /* (not the kick's grid: its keys are steps) */
+        if (((notes >> k) & 1u) && !maku_kick_grid())
+            maku_pick(kb_map(TSEL, k));
+}
+
 static void ui_input(void)
 {
     uint32_t pressed = fm1_input_edges(0), notes = fm1_input_note_edges(), now = fm1_ticks(), id, b, k;
@@ -1115,6 +1151,10 @@ static void ui_input(void)
     rec = btn_hold(&ui.rec_t0, B_REC, now, 0);          /* (a tap; held, the REC layer: ui_layer.c) */
     seq = btn_hold(&ui.seq_t0, B_SEQ, now, !ui.menu && !ui.confirm);
     save = btn_hold(&ui.save_t0, B_SAVE, now, !ui.menu && !ui.confirm);   /* held: UNDO (ui.c undo_swap) */
+    if (maku_knobs_on()) {                              /* (the buttons that are verbs: not a tap, a hold or a page) */
+        seq = save = rec = BT_NONE;
+        ui.seq_t0 = ui.save_t0 = ui.rec_t0 = 0;
+    }
     layer_lock_input(pressed);                          /* (#83: a button closes a locked layer) */
     layer_arm(pressed, now);
     if (((pressed >> panel.btn[B_REC]) & 1u) && ui.ly == LAYER_REC)
@@ -1176,6 +1216,9 @@ static void ui_input(void)
     if (home == BT_TAP && ui.menu) {                    /* HOME (pressed, or held) closes the menu, from ABOUT too; */
         menu_close();                                   /* the release of the hold that opened it is no tap */
         home = BT_NONE;                                 /* (menu_close went HOME already) */
+    } else if (home == BT_HOLD && maku_knobs_on()) {     /* HOME held: a new world */
+        maku_world_new();
+        home = BT_NONE;
     } else if (home == BT_HOLD) {                       /* HOME held: open the menu, or leave it */
         if (ui.menu) {
             menu_close();
@@ -1276,6 +1319,12 @@ static void ui_input(void)
     if (home == BT_TAP)                                 /* HOME acts on release: a hold opens the menu */
         go_home();
     cursor_fix();                                       /* LEN may have changed (knob, editor, load) */
+    if (maku_knobs_on()) {                              /* the verbs; of the buttons below only OCT- / OCT+ are still the legacy's */
+        if (!lay)
+            maku_buttons(pressed, notes);
+        pressed &= (1u << panel.btn[B_OCTDN]) | (1u << panel.btn[B_OCTUP]);
+        ui.pg_down = 0;
+    }
     for (id = 0; id < 14u; id++) {
         if (!((pressed >> id) & 1u))
             continue;

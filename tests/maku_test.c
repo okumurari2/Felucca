@@ -476,9 +476,81 @@ static int knobs(void)
     return bad;
 }
 
+static void down_for(uint32_t label, uint32_t frames)
+{
+    uint32_t k;
+    fm1_in.buttons |= 1u << panel.btn[label];
+    host_pressed |= 1u << panel.btn[label];
+    for (k = 0; k < frames; k++)
+        frame();
+}
+static void let_go(uint32_t label)
+{
+    fm1_in.buttons &= ~(1u << panel.btn[label]);
+    frame();
+    frame();
+}
+static int buttons(void)
+{
+    int bad = 0;
+    uint32_t i;
+    start(0);
+    ui.home = 1; ui.menu = 0; ui.confirm = 0;
+    down_for(B_FX, 3);
+    bad += check("BUTTONS: FX held: FREEZE, and no layer opens", (perf_held & PF_BIT(PF_FRZ)) && !ui.layer && !(kb_mask & (1u << panel.btn[B_FX])));
+    let_go(B_FX);
+    bad += check("  let go: it is off", !(perf_held & PF_BIT(PF_FRZ)));
+    down_for(B_ENV, 3);
+    down_for(B_SAVE, 3);
+    bad += check("  ENV: tape stop, SAVE: repeat, together", (perf_held & PF_BIT(PF_TAPE)) && (perf_held & PF_BIT(PF_R16)));
+    let_go(B_ENV);
+    let_go(B_SAVE);
+    down_for(B_EDIT, 3);
+    bad += check("  EDIT: harmonizer and its shimmer", (perf_held & PF_BIT(PF_OUP)) && perf_k[3] == 60);
+    let_go(B_EDIT);
+    bad += check("  .. off again", !(perf_held & PF_BIT(PF_OUP)) && perf_k[3] == 0);
+    down_for(B_PLAY, 3);
+    bad += check("  PLAY held: the kick is muted, and the transport does not start", (perf_held & PF_BIT(PF_M1)) && !transport_req);
+    let_go(B_PLAY);
+    bad += check("  .. and back", !(perf_held & PF_BIT(PF_M1)));
+    down_for(B_LFO, 3);
+    bad += check("  LFO: filter sweep, and no page opens", (perf_held & PF_BIT(PF_LPF)) && ui.home);
+    let_go(B_LFO);
+    down_for(B_SEQ, 3);
+    for (i = 0; i < 7000u; i++)
+        maku_block();
+    bad += check("  SEQ held: the riser climbs to +80", maku.riser && maku_eff() == 80u);
+    let_go(B_SEQ);
+    for (i = 0; i < 600u; i++)
+        maku_block();
+    bad += check("  .. and falls when let go", maku_eff() == 0u);
+    let_go(B_ARP);
+    down_for(B_ARP, 3);
+    let_go(B_ARP);
+    bad += check("  ARP toggles every track's arp", trk[0].p[P_AMODE] == 1 && trk[3].p[P_AMODE] == 1);
+    down_for(B_ARP, 3);
+    let_go(B_ARP);
+    bad += check("  .. and off", trk[0].p[P_AMODE] == 0);
+    down_for(B_REC, 3);
+    let_go(B_REC);
+    bad += check("  REC toggles the pick-up (and arms no recording)", maku.rec == 1 && song.rec == 0u);
+    down_for(B_REC, 3);
+    let_go(B_REC);
+    {
+        uint32_t r0 = (uint32_t)trk[1].p[P_ROOT], bpm = (uint32_t)song.g[G_BPM], same = 1, n;
+        for (n = 0; n < 6u && same; n++) {
+            down_for(B_HOME, 120);
+            let_go(B_HOME);
+            same = r0 == (uint32_t)trk[1].p[P_ROOT] && bpm == (uint32_t)song.g[G_BPM];
+        }
+        bad += check("  HOME held: a new world (the key or the tempo changes within 6 tries); the menu stays shut", !same && !ui.menu);
+    }
+    return bad;
+}
+
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs();
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons();
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }
