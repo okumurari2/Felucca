@@ -144,6 +144,8 @@ static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
         if (e->p != MM_NONE)
             trk[i].p[e->p] = (int16_t)(e->lo + ((int32_t)(e->hi - e->lo) * (int32_t)v + (e->hi >= e->lo ? 63 : -63)) / 127);
     }
+    if (i == MAKU_DRB && j == 2)
+        fx_rvs = (uint8_t)(v < 20u ? 0u : (v - 20u) * 90u / 107u);   /* AIR: the reverse swell comes in above ~20 */
     if (i == MAKU_KICK && j == 0)
         maku_set_density(v);
     else if (i == MAKU_DRA && j == 0)

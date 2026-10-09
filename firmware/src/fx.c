@@ -10,7 +10,9 @@
  *           (a rhythm of its own, no second buffer).
  *   REVERB  a 25 ms pre-delay; ROOM: two of its four combs are read at a slowly moving place (the tail shimmers
  *           instead of ringing), and the combs are mixed into left and right differently (the room has width).
- *           SPRING is as before (mono, into both sides). */
+ *           SPRING is as before (mono, into both sides).
+ *           REVERSE: what the reverb returns is also recorded, one beat at a time, and played back backwards under a
+ *           rising envelope: the swell that arrives just before the next beat. fx_rvs (0 .. 127) is how much of it. */
 #define DLY_LEN 65536u           /* 1.49 s: 1/4 at 40 BPM fits */
 #define CHO_LEN 2048u
 static int16_t dly_buf[DLY_LEN] __attribute__((section(".pool")));
@@ -21,6 +23,9 @@ static int16_t rev_comb[1116 + 1188 + 1277 + 1356] __attribute__((section(".pool
 #define PD_LEN 2048u            /* the reverb's pre-delay line */
 #define PD_TIME 1100u           /* .. 25 ms */
 static int16_t rev_pd[PD_LEN] __attribute__((section(".pool")));
+#define RV_MAX 8192u            /* the reverse buffers: two of these, the reverb's sum at half the rate (186 ms .. 0.74 s) */
+static int16_t rvs_buf[2][RV_MAX] __attribute__((section(".pool")));
+static uint8_t fx_rvs;           /* REVERSE: its level, 0 = off (the macro of a track: maku.c) */
 static int32_t wet_r[CTL];       /* the wet return, right (fx_buses: the left is its `wet`) */
 static int32_t *rev_rp = wet_r;  /* where the reverb adds its right side (the model change's fade moves it) */
 static union {                          /* ROOM's allpasses; SPRING's allpass chain (int32: no clamps) */
@@ -30,6 +35,9 @@ static union {                          /* ROOM's allpasses; SPRING's allpass ch
 #define rev_ap (rev_u.ap)
 static struct {
     uint32_t dly_w, cho_w, cho_ph, cho_ph2, dly_ph, pd_w, rv_ph;
+    uint32_t rvs_n, rvs_j, rvs_w, rvs_side;   /* REVERSE: the segment (half-rate samples), where playing is (full-rate), where recording is, which buffer records */
+    int32_t rvs_acc;                          /* .. the pair being summed */
+    uint32_t rvs_step, rvs_e;                 /* .. the envelope's place in the segment (Q16, 0 .. 1) and its step */
     int32_t dly_lp, dly_hp, dly_he;    /* (dly_he: the low cut's step remainder, as sp_he: no offset held in the loop) */
     uint16_t comb_i[4], ap_i[2];
     int32_t comb_lp[4];
@@ -322,6 +330,50 @@ static void rev_clear(void)
 
 static int32_t part_buf[CTL];                            /* a part's block (mix_part); the fade of a model change */
 
+/* REVERSE: adds the reversed swell of the reverb's return (l, r: this block's, before it joins `wet`) to both sides.
+ * Recording and playing go in step: a segment of S half-rate samples (a beat, at most RV_MAX) fills one buffer while the
+ * other, the last one filled, plays from its end to its start; the envelope grows with the square of the time, and
+ * the last 64 samples fade so the cut at the beat does not click. */
+static __attribute__((noinline)) void rev_reverse(const int32_t *l, const int32_t *r, int32_t *wl, int32_t *wr, uint32_t n)
+{
+    uint32_t i;
+    int32_t g = (int32_t)fx_rvs * 258;
+    for (i = 0; i < n; i++) {
+        uint32_t S = fx.rvs_n, j = fx.rvs_j, d, e;
+        int32_t o, x, env;
+        if (!S) {                                       /* a segment: a beat of half-rate samples */
+            S = beat_samples() / 2u;
+            S = S < 1024u ? 1024u : S > RV_MAX ? RV_MAX : S;
+            fx.rvs_n = S;
+            fx.rvs_step = (uint32_t)((1u << 31) / (2u * S));
+            fx.rvs_e = 0;
+        }
+        fx.rvs_acc += (l[i] + r[i]) >> 2;               /* record: two samples summed, one half-rate sample */
+        if (j & 1u) {
+            rvs_buf[fx.rvs_side][fx.rvs_w++] = (int16_t)clamp(fx.rvs_acc >> 1, -32768, 32767);
+            fx.rvs_acc = 0;
+        }
+        d = S - 1u - (j >> 1);                          /* play the other buffer from its end */
+        o = rvs_buf[fx.rvs_side ^ 1u][d];
+        if (j & 1u && d)
+            o = (o + rvs_buf[fx.rvs_side ^ 1u][d - 1u]) >> 1;
+        e = fx.rvs_e >> 16;                             /* 0 .. 32767: how far into the segment */
+        fx.rvs_e += fx.rvs_step;
+        env = (int32_t)((e * e) >> 15);
+        if (j + 64u > 2u * S)
+            env = (env * (int32_t)(2u * S - j)) >> 6;
+        x = mulq15(mulq15(o << 2, env), g);
+        wl[i] += x;
+        wr[i] += x;
+        if (++fx.rvs_j >= 2u * S) {                     /* the beat: swap, the new segment's length is read next sample */
+            fx.rvs_j = 0;
+            fx.rvs_w = 0;
+            fx.rvs_side ^= 1u;
+            fx.rvs_n = 0;
+        }
+    }
+}
+
 /* process the three buses for one block; sends in, the wet return out: `wet` (left) and wet_r (right) */
 static int32_t part_buf2[CTL];
 static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t *rev_in, int32_t *wet,
@@ -399,6 +451,24 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
         fx.rtype = (uint8_t)rt;
         return;
     }
+    if (fx_rvs) {                                       /* REVERSE: the reverb's own return, kept apart to be recorded */
+        int32_t *t = part_buf, *t2 = part_buf2;
+        for (i = 0; i < n; i++)
+            t[i] = t2[i] = 0;
+        rev_rp = t2;
+        if (rt)
+            rev_spring(rev_in, t, n);
+        else
+            rev_room(rev_in, t, n);
+        rev_rp = wet_r;
+        rev_reverse(t, t2, wet, wet_r, n);
+        for (i = 0; i < n; i++) {
+            wet[i] += t[i];
+            wet_r[i] += t2[i];
+        }
+        return;
+    }
+    fx.rvs_j = fx.rvs_w = fx.rvs_n = 0;                 /* (off: the next time starts a fresh segment) */
     if (rt)
         rev_spring(rev_in, wet, n);
     else

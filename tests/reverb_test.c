@@ -308,6 +308,58 @@ static void test_switch(void)
     check("  and back to ROOM", fx.rtype == 0);
 }
 
+/* REVERSE (fx_rvs): the reverb's return played backwards, a beat at a time, rising to the beat */
+static void test_reverse(void)
+{
+    static int32_t c[CTL], d[CTL], r[CTL], w[CTL];
+    uint32_t b, i, seg, nb;
+    double q[4] = {0, 0, 0, 0}, off = 0, peak = 0;
+    song.g[G_BPM] = 60;                                         /* a beat of 44100 samples: the segment is RV_MAX (0.74 s) */
+    for (int pass = 0; pass < 2; pass++) {
+        host_tracks_init();
+        rev_clear();
+        memset(dly_buf, 0, sizeof dly_buf);
+        memset(cho_buf, 0, sizeof cho_buf);
+        memset(rvs_buf, 0, sizeof rvs_buf);
+        memset(&fx, 0, sizeof fx);
+        song.g[G_RTYPE] = 0;
+        song.g[G_RSIZE] = 100;
+        song.g[G_RDAMP] = 40;
+        fx_rvs = pass ? 100 : 0;
+        seg = 2u * RV_MAX;                                      /* output samples per segment */
+        nb = 4u * seg / CTL;
+        for (b = 0; b < nb; b++) {
+            for (i = 0; i < CTL; i++) {
+                uint32_t t = b * CTL + i;
+                c[i] = d[i] = 0;
+                r[i] = t < 2000u ? noise(90000) : 0;           /* a burst at the start of the first segment */
+            }
+            fx_buses(c, d, r, w, CTL);
+            for (i = 0; i < CTL; i++) {
+                uint32_t t = b * CTL + i;
+                double v = w[i];
+                if (pass) {
+                    peak = fabs(v) > peak ? fabs(v) : peak;
+                    if (t >= seg && t < 2u * seg)                  /* the second segment: the swell of the first one's tail */
+                        q[(t - seg) * 4u / seg] += v * v;
+                }
+            }
+        }
+        if (!pass) {
+            off = 0;
+            for (i = 0; i < CTL; i++)
+                off += abs(w[i]);
+        }
+    }
+    {
+        char what[220];
+        snprintf(what, sizeof what, "REVERSE: the tail comes back reversed, the second half of the segment more than 3x the first: energy by quarter of the segment %.0f %.0f %.0f %.0f; peak %.0f",
+                 q[0], q[1], q[2], q[3], peak);
+        check(what, q[2] + q[3] > 3 * (q[0] + q[1]) && peak < (1 << 22));
+    }
+    fx_rvs = 0;
+}
+
 /* ---------------------------------------------------------------- cost --- */
 static double cost_of(int what)              /* 0 rev_room, 1 rev_spring, 2 fx_buses ROOM, 3 fx_buses SPRING */
 {
@@ -400,6 +452,7 @@ static void demo(const char *dir, const char *name, int rtype, int pluck)
 int main(int argc, char **argv)
 {
     test_character();
+    test_reverse();
     test_spring();
     test_clear();
     test_switch();
