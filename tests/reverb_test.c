@@ -2,9 +2,8 @@
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* The reverb bus's two models (src/fx.c: REVERB TYPE, G_RTYPE) on the Mac, through hostsim.c as regress.c.
  *   build/host/reverb_test [DEMODIR]          (run_tests.sh: build/fx_demo)
- * 1. ROOM bit-identical: fx_buses against a copy of the buses as they were before SPRING (chorus, delay and the
- *    4-comb room in one loop), on noise sends with SIZE / DAMP / the delay and chorus settings changing, sample
- *    for sample. (The goldens of regress.c, all rendered with ROOM, say the same for the whole mix.)
+ * 1. the buses' character (stereo chorus, tape delay, ROOM with pre-delay and moving combs): left and right differ,
+ *    bounded at the corners, silent after the sends stop.
  * 2. SPRING decay: the impulse response's RT60 (Schroeder integral, -5 .. -35 dB) rises with SIZE, within
  *    0.15 .. 1 s at SIZE 0 and 2 .. 6 s at 127.
  * 3. SPRING dispersion: the group delay of the first arrival rises with frequency (1 .. 5 kHz, each band later
@@ -51,93 +50,65 @@ static int32_t noise(int32_t amp)
     return (int32_t)(((int64_t)(int32_t)xs * amp) >> 31);
 }
 
-/* ------------------------------------------------- the buses before SPRING --- */
-static int16_t ref_dly[DLY_LEN], ref_cho[CHO_LEN], ref_comb[1116 + 1188 + 1277 + 1356], ref_ap[556 + 441];
-static struct {
-    uint32_t dly_w, cho_w, cho_ph;
-    int32_t dly_lp;
-    uint16_t comb_i[4], ap_i[2];
-    int32_t comb_lp[4];
-} rf;
-static void ref_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t *rev_in, int32_t *wet, uint32_t n)
+/* ------------------------------------------------------- the buses' character --- */
+/* The buses of this firmware (fx.c): a stereo ensemble chorus, a tape delay, a ROOM with a pre-delay, moving combs and
+ * a wide mix. Not the old mono buses any more (AMBIENT.md): what is kept is that they are stable and fall silent. */
+static void test_character_run(int sends_reverb)
 {
-    uint32_t i, k, dl = delay_samples();
-    int32_t fb = song.g[G_DFDBK] * 230, col = 2000 + song.g[G_DCOLOR] * 240;
-    int32_t dmix = song.g[G_DMIX] * 258;
-    int32_t size = 25000 + song.g[G_RSIZE] * 50, damp = 32767 - song.g[G_RDAMP] * 200;
-    int32_t cdepth = song.g[G_CDEPTH] * 6;
-    uint32_t cinc = LFO_INC[song.g[G_CRATE] & 127] / CTL;
-    for (i = 0; i < n; i++) {
-        int32_t y = 0, x, r, a;
-        ref_cho[rf.cho_w & (CHO_LEN - 1u)] = (int16_t)clamp(cho_in[i] >> 1, -32768, 32767);
-        rf.cho_ph += cinc;
-        r = (400 << 8) + ((osc_sine(rf.cho_ph) + 32768) * cdepth >> 8);
-        {
-            uint32_t ri = (uint32_t)r >> 8;
-            int32_t f = r & 255, c0 = ref_cho[(rf.cho_w - ri) & (CHO_LEN - 1u)];
-            int32_t c1 = ref_cho[(rf.cho_w - ri - 1u) & (CHO_LEN - 1u)];
-            y += (c0 + (((c1 - c0) * f) >> 8)) << 1;
-        }
-        rf.cho_w++;
-        x = ref_dly[(rf.dly_w - dl) & (DLY_LEN - 1u)];
-        rf.dly_lp += mulq15(x - rf.dly_lp, col);
-        ref_dly[rf.dly_w & (DLY_LEN - 1u)] = (int16_t)clamp((dly_in[i] >> 1) + mulq15(rf.dly_lp, fb), -32768, 32767);
-        rf.dly_w++;
-        y += mulq15(x << 1, dmix);
-        a = 0;
-        {
-            int16_t *c = ref_comb;
-            int32_t in = mulq15(rev_in[i], 2580);
-            for (k = 0; k < 4u; k++) {
-                int32_t o = c[rf.comb_i[k]];
-                rf.comb_lp[k] = o + mulq15(rf.comb_lp[k] - o, 32767 - damp);
-                c[rf.comb_i[k]] = (int16_t)clamp(in + mulq15(rf.comb_lp[k], size), -32768, 32767);
-                if (++rf.comb_i[k] >= REV_COMB[k])
-                    rf.comb_i[k] = 0;
-                a += o;
-                c += REV_COMB[k];
-            }
-            c = ref_ap;
-            for (k = 0; k < 2u; k++) {
-                int32_t o = c[rf.ap_i[k]];
-                int32_t v = a + (o >> 1);
-                c[rf.ap_i[k]] = (int16_t)clamp(v, -32768, 32767);
-                a = o - a;
-                if (++rf.ap_i[k] >= REV_AP[k])
-                    rf.ap_i[k] = 0;
-                c += REV_AP[k];
-            }
-        }
-        y += a;
-        wet[i] = y;
-    }
-}
-
-static void test_room_identical(void)
-{
-    static int32_t c[CTL], d[CTL], r[CTL], w0[CTL], w1[CTL];
-    uint32_t b, i, diff = 0, nb = 30u * FS / CTL;
+    static int32_t c[CTL], d[CTL], r[CTL], w[CTL];
+    uint32_t b, i, nb = 20u * FS / CTL;
+    int64_t sl = 0, sr = 0, sll = 0, srr = 0, slr = 0;
+    int32_t peak = 0, last_l = 0, last_r = 0, rms_den = 0;
     host_tracks_init();
+    rev_clear();
+    memset(dly_buf, 0, sizeof dly_buf);
+    memset(cho_buf, 0, sizeof cho_buf);
+    fx.rtype = 0;
+    song.g[G_RTYPE] = 0;
+    song.g[G_DFDBK] = 120;                                      /* the corners: the longest feedback, the largest sizes */
+    song.g[G_RSIZE] = 127;
+    song.g[G_RDAMP] = 0;
+    song.g[G_CDEPTH] = 127;
     for (b = 0; b < nb; b++) {
-        if (b % 700u == 0u) {                                   /* the settings move now and then */
-            song.g[G_RSIZE] = (int16_t)((uint32_t)noise(1 << 30) % 128u);
-            song.g[G_RDAMP] = (int16_t)((uint32_t)noise(1 << 30) % 128u);
-            song.g[G_DTIME] = (int16_t)((uint32_t)noise(1 << 30) % 6u);
-            song.g[G_DFDBK] = (int16_t)((uint32_t)noise(1 << 30) % 121u);
-            song.g[G_CDEPTH] = (int16_t)((uint32_t)noise(1 << 30) % 128u);
-        }
+        int32_t on = b < 6u * FS / CTL && (b / 150u) % 2u == 0u;     /* bursts for 6 s, then silence for 14 */
         for (i = 0; i < CTL; i++) {
-            int32_t on = (b / 300u) % 3u != 2u;                 /* bursts and silences: the tails too */
             c[i] = on ? noise(60000) : 0;
             d[i] = on ? noise(60000) : 0;
-            r[i] = on ? noise(b % 2000u < 1000u ? 90000 : 4000) : 0;
+            r[i] = on && sends_reverb ? noise(90000) : 0;
         }
-        fx_buses(c, d, r, w0, CTL);
-        ref_buses(c, d, r, w1, CTL);
-        for (i = 0; i < CTL; i++)
-            diff += w0[i] != w1[i];
+        fx_buses(c, d, r, w, CTL);
+        for (i = 0; i < CTL; i++) {
+            int32_t l = w[i], rr = wet_r[i];
+            peak = abs(l) > peak ? abs(l) : peak;
+            peak = abs(rr) > peak ? abs(rr) : peak;
+            if (b >= 2u * FS / CTL && b < 6u * FS / CTL) {      /* the sounding part: the image */
+                sl += l; sr += rr;
+                sll += (int64_t)l * l; srr += (int64_t)rr * rr; slr += (int64_t)l * rr;
+            }
+            if (b == nb - 1u) {
+                last_l = abs(l) > last_l ? abs(l) : last_l;
+                last_r = abs(rr) > last_r ? abs(rr) : last_r;
+            }
+        }
     }
-    check("ROOM: the buses bit for bit as before SPRING (30 s of noise sends, settings changing)", !diff && !fx.rtype);
+    if (sends_reverb) {
+        double cc = (double)slr / sqrt((double)sll * (double)srr + 1.0);
+        char what[200];
+        snprintf(what, sizeof what, "the buses' left and right are two different signals: correlation %.2f (< 0.9); peak %d", cc, peak);
+        check(what, cc < 0.9 && cc > -0.9 && peak < (1 << 22));
+    }
+    (void)sl; (void)sr; (void)rms_den;
+    {
+        char what[200];
+        snprintf(what, sizeof what, "%s at the corners (FDBK 120, SIZE 127, DAMP 0, CDP 127): 14 s after the last burst %d, %d%s", sends_reverb ? "chorus, tape delay and ROOM" : "chorus and tape delay",
+                 last_l, last_r, sends_reverb ? " (ROOM's fixed-point tail was never exactly 0: at most 512)" : " (silent)");
+        check(what, sends_reverb ? last_l < 512 && last_r < 512 : last_l == 0 && last_r == 0);
+    }
+}
+static void test_character(void)
+{
+    test_character_run(1);
+    test_character_run(0);
 }
 
 /* ------------------------------------------------------------- SPRING --- */
@@ -428,7 +399,7 @@ static void demo(const char *dir, const char *name, int rtype, int pluck)
 
 int main(int argc, char **argv)
 {
-    test_room_identical();
+    test_character();
     test_spring();
     test_clear();
     test_switch();

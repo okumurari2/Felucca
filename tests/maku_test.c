@@ -615,9 +615,69 @@ static int worlds_voices(void)
     return bad;
 }
 
+#include <time.h>
+/* host CPU cost of the whole device (not a pass / fail: the hardware's cost is read off the ratios; see docs/AMBIENT.md) */
+static double bench_once(uint32_t seed, uint32_t density, uint32_t open, uint32_t verbs, uint32_t bars)
+{
+    int32_t o[2u * CTL];
+    struct timespec t0, t1;
+    uint32_t b, nb = bars * BAR_STEPS * step_blocks();
+    start(density);
+    if (seed)
+        maku_world(seed * 7919u);
+    maku_macro_set(MAKU_DRA, 0, open);
+    maku_macro_set(MAKU_ARP, 0, open);
+    maku_set_density(density);
+    for (uint32_t i = 0; i < NTRK; i++)
+        trk[i].engine = trk[i].eng_req;
+    perf_held = verbs;
+    perf_k[3] = verbs & PF_BIT(PF_OUP) ? 60 : 0;
+    for (b = 0; b < 200u; b++) {                       /* (warm up: the voices are sounding) */
+        memset(o, 0, sizeof o);
+        mix_block(o, CTL);
+    }
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    for (b = 0; b < nb; b++) {
+        memset(o, 0, sizeof o);
+        mix_block(o, CTL);
+    }
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    perf_held = 0;
+    perf_k[3] = 0;
+    return ((t1.tv_sec - t0.tv_sec) * 1e9 + (t1.tv_nsec - t0.tv_nsec)) / ((double)nb * CTL);
+}
+static double bench_run(uint32_t seed, uint32_t density, uint32_t open, uint32_t verbs, uint32_t bars)
+{
+    double best = 1e9;                                  /* the least of five: a busy machine only ever adds */
+    for (int r = 0; r < 5; r++) {
+        double t = bench_once(seed, density, open, verbs, bars);
+        best = t < best ? t : best;
+    }
+    return best;
+}
+static int bench(void)
+{
+    double idle = bench_run(0, 0, 60, 0, 4), old = bench_run(0, 127, 60, 0, 6), worst = 0, avg = 0, fx = 0, fxmax = 0;
+    uint32_t seed, n = 0;
+    for (seed = 1; seed <= 12u; seed++) {
+        double a = bench_run(seed, 127, 127, 0, 6), c = bench_run(seed, 127, 127,
+                   PF_BIT(PF_FRZ) | PF_BIT(PF_OUP) | PF_BIT(PF_R16) | PF_BIT(PF_LPF), 6);
+        worst = a > worst ? a : worst;
+        fxmax = c > fxmax ? c : fxmax;
+        avg += a;
+        fx += c;
+        n++;
+    }
+    printf("ui:   CPU on the host, ns per sample: quiet %.0f | the old MAKU setup at 127 %.0f | 12 worlds at 127, OPEN / LOOSE 127: mean %.0f worst %.0f | same with FREEZE+HARMONIZER+REPEAT+LPF held: mean %.0f worst %.0f\n",
+           idle, old, avg / n, worst, fx / n, fxmax);
+    printf("ui:   relative to the old setup (30 %% of the chip, docs/MAKU.md): worlds mean x%.2f worst x%.2f | with the verbs mean x%.2f worst x%.2f\n",
+           avg / n / old, worst / old, fx / n / old, fxmax / old);
+    return 0;
+}
+
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + screen() + worlds_voices();
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + screen() + worlds_voices() + (getenv("MAKU_BENCH") ? bench() : 0);
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }
