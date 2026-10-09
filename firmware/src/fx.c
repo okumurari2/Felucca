@@ -13,7 +13,8 @@
  *           SPRING is as before (mono, into both sides).
  *           REVERSE: what the reverb returns is also recorded, one beat at a time, and played back backwards under a
  *           rising envelope: the swell that arrives just before the next beat. fx_rvs (0 .. 127) is how much of it. */
-#define DLY_LEN 65536u           /* 1.49 s: 1/4 at 40 BPM fits */
+#define DLY_LEN 32768u           /* 0.74 s (the other half of the old line went to REVERSE's buffers); a time longer than that
+                                  * folds down by halves, so the echo stays on the beat */
 #define CHO_LEN 2048u
 static int16_t dly_buf[DLY_LEN] __attribute__((section(".pool")));
 static int16_t cho_buf[CHO_LEN] __attribute__((section(".pool")));
@@ -208,7 +209,9 @@ static uint32_t div_samples(uint32_t div)
 static uint32_t delay_samples(void)
 {
     uint32_t s = div_samples((uint32_t)song.g[G_DTIME]);
-    return s < 16u ? 16u : s >= DLY_LEN ? DLY_LEN - 1u : s;
+    while (s >= DLY_LEN)
+        s >>= 1;
+    return s < 16u ? 16u : s;
 }
 
 /* ROOM (G_RTYPE 0): 4 damped combs + 2 allpasses (Freeverb-like), added to out (left) and *rev_rp (right). Combs 1 and 3

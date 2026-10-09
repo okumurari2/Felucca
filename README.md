@@ -1,26 +1,18 @@
-# Felucca
+# MAKU
 
 [![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue.svg)](LICENSE)
-[![Sponsor](https://img.shields.io/badge/Sponsor-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/hugelton)
 
-![Felucca 1.0](docs/felucca-1.0.png)
+**MAKU (幕間機)** is an always-on ambience machine for the M-VAVE FM-1: power it on and a new, random, in-key
+world is already playing. Four parts (a pulse, a floor, a haze, a voice), four volume knobs, three macros per part,
+and buttons that are verbs (freeze, tape stop, sweep, repeat, break, riser...). Nothing is saved: every boot is a
+new world, and HOME held makes another.
 
-**TL;DR:** Felucca 1.1.5.1 — Big New Features, field testing. Connect your FM-1 to a computer by USB,
-open the [web installer](https://hugelton.github.io/Felucca/) in Chrome or Edge, and press Install;
-no extra hardware is needed. Installing is at your own risk: M-VAVE's updater or the installer's
-**Return to official V15** takes you back. Want to look around first?
-[Try it in your browser](https://hugelton.github.io/Felucca/webapp/try/), no FM-1 needed.
+MAKU is built on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only;
+the rest of this README is Felucca's, kept until the parts MAKU drops are removed. Installing is at your own risk:
+M-VAVE's updater or the installer's **Return to official V15** takes you back.
 
-Multi-engine synthesizer firmware for the M-VAVE FM-1. Please report what you find in
-[Issues](https://github.com/hugelton/Felucca/issues).
-
-- Install: [web installer](https://hugelton.github.io/Felucca/) (Chrome or Edge, USB), or `tools/fm1_install.py` from a terminal
-- Try: [Felucca in your browser](https://hugelton.github.io/Felucca/webapp/try/): the same firmware compiled to
-  WebAssembly, with the panel on screen (mouse, touch, computer keyboard, Web MIDI in)
-- Editor: [web editor](https://hugelton.github.io/Felucca/webapp/editor/); its development has moved to
-  [Felucca-WebApp](https://github.com/hugelton/Felucca-WebApp)
+- Spec: [docs/AMBIENT.md](docs/AMBIENT.md) (Japanese). The design notes of the generator under it: [docs/MAKU.md](docs/MAKU.md)
 - Build: [BUILDING.md](BUILDING.md)
-- MAKU (interlude mode, a DENSITY macro over a drone, a kick and an arp): [docs/MAKU.md](docs/MAKU.md) (Japanese)
 
 <a href="https://hugelton.itch.io/felucca"><img src="https://static.itch.io/images/badge-color.svg" alt="Available on itch.io" width="74"></a>
 
