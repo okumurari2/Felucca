@@ -1055,12 +1055,47 @@ static void ui_notices(void)
     }
 }
 
+/* AMBIENT.md: KNOB 1..4 are the four tracks' volumes (a turn moves the focus there too); SELECT / PRESETS / ALGORITHM
+ * are the macros of the focused track (maku.c MAKU_MAC). Returns 1 when MAKU owns the knobs now */
+static int maku_knobs_on(void)
+{
+    return maku.on && !ui.menu && !ui.confirm && !name_on();
+}
+static void maku_knobs(uint32_t glo)
+{
+    uint32_t k, j;
+    int32_t s;
+    for (k = 0; k < 4u; k++) {
+        if ((s = panel_enc(EN_K1 + k)) == 0)
+            continue;
+        track_select(k);
+        trk[k].p[P_LEVEL] = (int16_t)clamp(trk[k].p[P_LEVEL] + accel(EN_K1 + k, s, 127), 0, 127);
+        ui.hot_col = (uint8_t)k;
+        ui.hot_t = 40;
+        ui.force = 1;
+    }
+    for (j = 0; j < 3u; j++) {
+        uint32_t f = song.sel < 4u ? song.sel : 0u, e = j == 0u ? EN_SELECT : j == 1u ? EN_PRESET : EN_ALGO;
+        if (j == 0u && glo)
+            continue;                                   /* GLO held: SELECT is the tempo */
+        if ((s = panel_enc(e)) == 0)
+            continue;
+        {
+            char b[8];
+            maku_macro_set(f, j, (uint32_t)clamp((int32_t)maku.m[f][j] + accel(e, s, 127), 0, 127));
+            fmt_int(b, maku.m[f][j]);
+            ui_say(MAKU_MAC[f][j].name, b);
+            ui.force = 1;
+        }
+    }
+}
+
 static void ui_input(void)
 {
     uint32_t pressed = fm1_input_edges(0), notes = fm1_input_note_edges(), now = fm1_ticks(), id, b, k;
     uint32_t home, rec, seq, save;
     uint32_t oct;
-    uint32_t lay, combo = 0, lytap, lkeys, glo, kq = 0;
+    uint32_t lay, combo = 0, lytap, lkeys, glo, kq = 0, mk;
     int32_t s, sel = 0, ks[4] = {0, 0, 0, 0};
     static uint32_t lock_ms;                            /* BPM LOCK: the last locked SELECT turn (fm1_ms | 1; 0 none) */
     fm6_poll();                                         /* FM6: PTCH turned -> its patch */
@@ -1320,11 +1355,17 @@ static void ui_input(void)
      * pass runs, so one landing after the layer's read went to the page as well: KNOB 1..4 edited the layer's control
      * and the page under it (HOME's sound, motion recorded), PRESETS could load a sound. They stay for the next pass */
     kq |= lay;
-    if (!lay && (s = panel_enc(EN_PRESET)) != 0)
+    mk = (uint32_t)maku_knobs_on();
+    if (mk) {
+        if (!lay)
+            maku_knobs(glo);
+        kq = 1;                                         /* (the page's KNOB 1..4 below are MAKU's volumes, read above) */
+    }
+    if (!mk && !lay && (s = panel_enc(EN_PRESET)) != 0)
         presets_turn(s);
-    if (!lay && (s = panel_enc(EN_ALGO)) != 0)     /* ALGORITHM: the selected track, on every page */
+    if (!mk && !lay && (s = panel_enc(EN_ALGO)) != 0)     /* ALGORITHM: the selected track, on every page */
         track_select((uint32_t)clamp((int32_t)song.sel + (s > 0 ? 1 : -1), 0, NTRK - 1));
-    if ((s = glo ? sel : panel_enc(EN_SELECT)) != 0) {   /* SELECT knob = global tempo; */
+    if ((glo || !mk) && (s = glo ? sel : panel_enc(EN_SELECT)) != 0) {   /* SELECT knob = global tempo; */
         if (glo || !(ui_prefs & PREF_BPM_LOCK)) {
             song.g[G_BPM] = (int16_t)clamp(song.g[G_BPM] + accel(EN_SELECT, s, 200), GP[G_BPM].min, GP[G_BPM].max);
             ui.bpm_t = 40;                              /* the header's BPM lights up; no message over the header */

@@ -449,9 +449,36 @@ static int macros(void)
     return bad;
 }
 
+static int knobs(void)
+{
+    int bad = 0;
+    uint32_t i, lv, m;
+    start(0);
+    ui.home = 1; ui.menu = 0; ui.confirm = 0;
+    song.sel = 0;
+    lv = (uint32_t)trk[2].p[P_LEVEL];
+    turn(EN_K3, -3);
+    bad += check("KNOBS: KNOB 3 turns track 3's volume down and moves the focus there", trk[2].p[P_LEVEL] == (int16_t)lv - 3 && song.sel == 2);
+    turn(EN_K3, 500);
+    bad += check("  the volume stops at 127", trk[2].p[P_LEVEL] == 127);
+    m = maku.m[2][1];
+    turn(EN_PRESET, 4);
+    bad += check("  PRESETS turns the focused track's macro 2 (and does not load a sound)", maku.m[2][1] == m + 4u && song.sel == 2);
+    m = maku.m[2][2];
+    turn(EN_ALGO, -2);
+    bad += check("  ALGORITHM turns macro 3; the focus stays", maku.m[2][2] == m - 2u && song.sel == 2);
+    turn(EN_SELECT, 3);
+    bad += check("  SELECT turns macro 1 (the tempo is GLO's)", maku.m[2][0] > 0u);
+    turn(EN_K1, 1);
+    m = maku.m[0][0];
+    turn(EN_SELECT, 5);
+    bad += check("  with the kick focused SELECT is DENSITY", maku.dens == m + 5u);
+    return bad;
+}
+
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros();
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs();
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }
