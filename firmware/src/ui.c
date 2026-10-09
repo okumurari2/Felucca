@@ -1120,7 +1120,7 @@ static void maku_setup(void)
         {8, 0, MAKU_DRB_LEN, 76, 110, 30},                 /* SHIMMER: GRAIN CLOUD PAD */
         {ENGI_PHYS, 4, MAKU_ARP_LEN, 78, 85, 70},          /* ARP: PHYS KALIMBA, into the delay and the room */
     };
-    uint32_t i;
+    uint32_t i, j;
     for (i = 0; i < NTRK; i++) {
         track_t *t = &trk[i];
         set_engine_of(t, R[i].eng);
@@ -1151,6 +1151,12 @@ static void maku_setup(void)
         if (i != MAKU_KICK)                       /* and every held sound rings on after its short gate */
             t->p[P_REL] = i == MAKU_ARP ? 50 : 70;   /* (measured: tails this long keep the four parts under 8 voices) */
     }
+    trk[MAKU_DRA].p[P_LRATE] = 36;                    /* SWAY's slow LFO on the drone's filter */
+    for (i = 0; i < 4u; i++)
+        for (j = 0; j < 3u; j++)
+            maku_macro_set(i, j, 40u);
+    maku_macro_set(MAKU_DRA, 0, 60u);                  /* (three voices, and the arp as written) */
+    maku_macro_set(MAKU_ARP, 0, 0);
     song.g[G_BPM] = 72;
     maku.on = 1;
     maku.dens = 0;
@@ -1166,7 +1172,7 @@ static void maku_setup(void)
 static void maku_world(uint32_t seed)
 {
     static const uint8_t SC[] = {2, 3, 4, 5, 6, 9};          /* MIN DOR MIX PEN MPEN LYD */
-    uint32_t i;
+    uint32_t i, j;
     rng_state = seed ? seed : 0x1234567u;
     for (i = 0; i < 4u; i++)
         (void)rng();                                          /* (a xorshift shows its seed for a few draws) */
@@ -1176,7 +1182,11 @@ static void maku_world(uint32_t seed)
     maku.root = (uint8_t)trk[MAKU_DRA].p[P_ROOT];
     maku.scale = (uint8_t)trk[MAKU_DRA].p[P_SCALE];
     song.g[G_BPM] = (int16_t)(70u + rng() % 21u);             /* 70..90 */
-    maku_set_density(24u + rng() % 33u);                      /* 24..56: a hint to a pulse */
+    maku_macro_set(0, 0, 24u + rng() % 33u);                  /* 24..56: a hint to a pulse */
+    for (i = 0; i < 4u; i++)                                  /* every track's other macros start somewhere in the middle */
+        for (j = 0; j < 3u; j++)
+            if (i || j)
+                maku_macro_set(i, j, i == MAKU_ARP && !j ? rng() % 40u : i == MAKU_DRA && !j ? 45u + rng() % 70u : 25u + rng() % 60u);
 }
 static void set_engine(uint32_t ei) { set_engine_of(TSEL, ei); }
 

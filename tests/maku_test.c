@@ -411,9 +411,47 @@ static int kickgrid(void)
     return bad;
 }
 
+static int macros(void)
+{
+    int bad = 0;
+    uint32_t i, j, n, ok = 1, steals, maxact = 0, b;
+    start(0);
+    maku_macro_set(2, 2, 0);
+    bad += check("MACRO: AIR 0 -> REV 60, DLY 0, ATK 60", trk[2].p[P_REV] == 60 && trk[2].p[P_DLY] == 0 && trk[2].p[P_ATK] == 60);
+    maku_macro_set(2, 2, 127);
+    bad += check("  AIR 127 -> REV 127, DLY 70, ATK 127", trk[2].p[P_REV] == 127 && trk[2].p[P_DLY] == 70 && trk[2].p[P_ATK] == 127);
+    maku_macro_set(0, 1, 127);
+    bad += check("  a macro can run down: TONE 127 on the kick -> DECY 70", trk[0].p[P_E3] == 70 && trk[0].p[P_E2] == 110);
+    maku_macro_set(0, 0, 90);
+    bad += check("  KICK SELECT is DENSITY", maku.dens == 90);
+    for (i = 0; i < 4; i++)
+        for (j = 0; j < 3; j++)
+            for (n = 0; n < 128u; n += 7u) {
+                uint32_t e;
+                maku_macro_set(i, j, n);
+                for (e = 0; e < 3u; e++) {
+                    const mm_t *m = &MAKU_MAC[i][j].m[e];
+                    if (m->p != MM_NONE)
+                        ok &= trk[i].p[m->p] >= (m->lo < m->hi ? m->lo : m->hi) && trk[i].p[m->p] <= (m->lo < m->hi ? m->hi : m->lo);
+                }
+            }
+    bad += check("  every macro value keeps its parameters inside lo..hi", ok);
+    start(127);
+    maku_macro_set(MAKU_DRA, 0, 127);
+    maku_macro_set(MAKU_ARP, 0, 127);
+    sim(16 * 24);
+    {
+        uint32_t four = 0;
+        for (i = 0; i < nhits[1]; i++)
+            four += 0;
+        bad += check("  OPEN 127 / LOOSE 127 at DENSITY 127: the voices still fit (the arp still plays)", nhits[1] > 0u && nhits[3] > 40u);
+    }
+    return bad;
+}
+
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid();
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros();
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }

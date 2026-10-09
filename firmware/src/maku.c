@@ -34,6 +34,9 @@ static struct {
     uint8_t run_left;            /* arp steps still to play from the table before it jumps */
     uint8_t pos;                 /* the place in the table */
     uint8_t cyc_a, cyc_b;        /* drone cycles done: the chord note rotates with them */
+    uint8_t open;                /* DRONE: OPEN 0..127: how many voices of the chord and how wide */
+    uint8_t loose;               /* ARP: LOOSE 0..127: how much the phrase unravels and climbs */
+    uint8_t m[4][3];             /* the macro of each track's SELECT / PRESETS / ALGORITHM, 0..127 */
     uint8_t root, scale;         /* last ROOT / SCALE seen on any track (a change is copied to all four) */
     int32_t duck;                /* the kick's dip of the other tracks' level, Q12 (4096: none); it recovers in maku_block */
 } maku;
@@ -92,6 +95,57 @@ static uint32_t maku_kick_chance(uint32_t idx, uint32_t d)
     if (!(idx & 3u))                                /* 4, 12 */
         return d < 80u ? 0u : (d - 80u) * 100u / 47u > 100u ? 100u : (d - 80u) * 100u / 47u;
     return 0u;
+}
+
+
+/* the three parameters of each track (docs/AMBIENT.md): SELECT, PRESETS and ALGORITHM each own one macro, 0..127,
+ * and a macro moves up to three real parameters at once, lo at 0 and hi at 127 (hi below lo: it runs down).
+ * p 0xFF: nothing (the macro's effect is read from maku.* directly: DENSITY, OPEN, LOOSE) */
+typedef struct { uint8_t p; int16_t lo, hi; } mm_t;
+#define MM_NONE 0xFFu
+static const struct { const char *name; mm_t m[3]; } MAKU_MAC[4][3] = {
+    {   /* 1 KICK */
+        {"DENS", {{MM_NONE, 0, 0}, {MM_NONE, 0, 0}, {MM_NONE, 0, 0}}},
+        {"TONE", {{P_E2, 30, 110}, {P_E4, 10, 100}, {P_E3, 120, 70}}},
+        {"WASH", {{P_REV, 20, 100}, {P_DLY, 0, 40}, {P_E7, 0, 60}}},
+    },
+    {   /* 2 DRONE */
+        {"OPEN", {{MM_NONE, 0, 0}, {MM_NONE, 0, 0}, {MM_NONE, 0, 0}}},
+        {"TONE", {{P_E2, 40, 127}, {P_E6, 40, 127}, {MM_NONE, 0, 0}}},
+        {"SWAY", {{P_CHOR, 0, 90}, {P_LD_FLT, 0, 50}, {P_REL, 60, 110}}},
+    },
+    {   /* 3 SHIMMER */
+        {"GRAIN", {{P_E3, 30, 127}, {P_E2, 120, 40}, {MM_NONE, 0, 0}}},
+        {"TONE", {{P_E7, 40, 127}, {P_E5, 10, 90}, {P_E6, 0, 60}}},
+        {"AIR", {{P_REV, 60, 127}, {P_DLY, 0, 70}, {P_ATK, 60, 127}}},
+    },
+    {   /* 4 ARP */
+        {"LOOSE", {{MM_NONE, 0, 0}, {MM_NONE, 0, 0}, {MM_NONE, 0, 0}}},
+        {"TONE", {{P_E2, 40, 120}, {P_E3, 110, 50}, {P_E5, 60, 127}}},
+        {"TRAIL", {{P_DLY, 20, 110}, {P_REV, 40, 120}, {P_REL, 30, 90}}},
+    },
+};
+
+static void maku_set_density(uint32_t d);
+/* macro j of track i to v (0..127): stored, and every parameter it owns moves */
+static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
+{
+    uint32_t n;
+    if (i >= 4u || j >= 3u)
+        return;
+    v = v > 127u ? 127u : v;
+    maku.m[i][j] = (uint8_t)v;
+    for (n = 0; n < 3u; n++) {
+        const mm_t *e = &MAKU_MAC[i][j].m[n];
+        if (e->p != MM_NONE)
+            trk[i].p[e->p] = (int16_t)(e->lo + ((int32_t)(e->hi - e->lo) * (int32_t)v + (e->hi >= e->lo ? 63 : -63)) / 127);
+    }
+    if (i == MAKU_KICK && j == 0)
+        maku_set_density(v);
+    else if (i == MAKU_DRA && j == 0)
+        maku.open = (uint8_t)v;
+    else if (i == MAKU_ARP && j == 0)
+        maku.loose = (uint8_t)v;
 }
 
 /* the kick's pattern, set by hand: bit i = step i of 16 holds a kick (lane 0) in the track's stored steps */
@@ -190,10 +244,12 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             maku.cyc_a++;
         {
             const uint8_t *c = MAKU_CHORD[(idx / 19u + 3u * maku.cyc_a) % 6u];   /* (3 a cycle: six chords in two cycles) */
-            uint32_t k;
-            for (k = 0; k < 3u; k++)
+            uint32_t k, nv = 2u + maku.open / 43u;       /* OPEN: 2 voices .. root, 5th, octave and the 9th above */
+            for (k = 0; k < 3u && k < nv; k++)
                 out->note[k] = (uint8_t)maku_note(t, c[k], 36u);
-            out->n = 3;
+            if (nv > 3u)
+                out->note[k++] = (uint8_t)maku_note(t, c[0] + 9u, 36u);
+            out->n = (uint8_t)k;
         }
         out->vel = (uint8_t)(78u - d / 4u - (idx / 19u) * 6u);
         return 1;
@@ -230,8 +286,10 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         maku.pos = (uint8_t)((maku.pos + 1u) % MAKU_TABLE);
         if (deg == MAKU_REST)
             return 0;
-        if ((uint32_t)(rng() % 100u) < d / 3u)      /* loosen: re-roll this note */
+        if ((uint32_t)(rng() % 100u) < d / 3u + maku.loose / 3u)     /* loosen: re-roll this note */
             deg = 7u + rng() % 10u;
+        else if ((uint32_t)(rng() % 100u) < maku.loose / 4u)         /* and climb: an octave up */
+            deg += 7u;
         out->n = 1;
         out->note[0] = (uint8_t)maku_note(t, deg, 48u);
         out->vel = (uint8_t)(46u + rng() % (14u + d / 4u));
