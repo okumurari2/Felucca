@@ -1175,6 +1175,8 @@ static void maku_setup(void)
     maku.pk_n = maku.pk_av = 0;
     maku.dens = 0;
     maku.run_left = 0;
+    maku.frame_on = 0;
+    song.octave = 0;                                  /* (OCT- / OCT+ are the circle of fifths here, not the keys' range) */
     maku.root = 0;
     maku.scale = 2;
     maku_follow();
