@@ -27,6 +27,13 @@ static int16_t rev_pd[PD_LEN] __attribute__((section(".pool")));
 #define RV_MAX 8192u            /* the reverse buffers: two of these, the reverb's sum at half the rate (186 ms .. 0.74 s) */
 static int16_t rvs_buf[2][RV_MAX] __attribute__((section(".pool")));
 static uint8_t fx_rvs;           /* REVERSE: its level, 0 = off (the macro of a track: maku.c) */
+static int32_t maku_dive(void);
+/* REVERSE as played: the level, deepened towards full by the BREAK's dive (0 with MAKU off: fx_rvs exactly) */
+static uint32_t rvs_level(void)
+{
+    int32_t v = (int32_t)fx_rvs, dv = maku_dive();
+    return (uint32_t)(dv ? v + (((100 - v) * dv) >> 12) : v);
+}
 static int32_t wet_r[CTL];       /* the wet return, right (fx_buses: the left is its `wet`) */
 static int32_t *rev_rp = wet_r;  /* where the reverb adds its right side (the model change's fade moves it) */
 static union {                          /* ROOM's allpasses; SPRING's allpass chain (int32: no clamps) */
@@ -340,7 +347,7 @@ static int32_t part_buf[CTL];                            /* a part's block (mix_
 static __attribute__((noinline)) void rev_reverse(const int32_t *l, const int32_t *r, int32_t *wl, int32_t *wr, uint32_t n)
 {
     uint32_t i;
-    int32_t g = (int32_t)fx_rvs * 258;
+    int32_t g = (int32_t)rvs_level() * 258;
     for (i = 0; i < n; i++) {
         uint32_t S = fx.rvs_n, j = fx.rvs_j, d, e;
         int32_t o, x, env;
@@ -454,7 +461,7 @@ static void fx_buses(const int32_t *cho_in, const int32_t *dly_in, const int32_t
         fx.rtype = (uint8_t)rt;
         return;
     }
-    if (fx_rvs) {                                       /* REVERSE: the reverb's own return, kept apart to be recorded */
+    if (rvs_level()) {                                  /* REVERSE: the reverb's own return, kept apart to be recorded */
         int32_t *t = part_buf, *t2 = part_buf2;
         for (i = 0; i < n; i++)
             t[i] = t2[i] = 0;
@@ -689,6 +696,7 @@ static __attribute__((noinline)) void track_insert(track_t *t, int32_t *b, uint3
  * -> dist -> SLICER -> level / pan / sends -> buses -> master; out: stereo Q15 */
 static void events_block(uint32_t n);                    /* seq.c */
 static int32_t maku_gain(uint32_t i);                    /* maku.c: the kick's dip of a track's level, Q12 */
+static int32_t maku_dive(void);                          /* maku.c: how deep the BREAK has dived, Q12 (0 with MAKU off) */
 static int32_t send_c[CTL], send_d[CTL], send_r[CTL], wet[CTL], mix_l[CTL], mix_r[CTL];
 
 /* one synth part into the dry mix and the sends; a part with no voice sounding costs
@@ -714,6 +722,11 @@ static void mix_part(track_t *t, uint32_t n)
         lvl = (lvl * maku_gain((uint32_t)(t - trk))) >> 12;   /* (LEVEL_Q12 * Q12 fits 32 bits; x1.0 exact) */
         int32_t gl = 4096 - (pan > 0 ? pan * 64 : 0), gr = 4096 + (pan < 0 ? pan * 64 : 0);
         int32_t c = t->p[P_CHOR] * 258, d = t->p[P_DLY] * 258, r = t->p[P_REV] * 258, pk = t->peak;
+        int32_t dv = (uint32_t)(t - trk) == 0u ? 0 : maku_dive();   /* BREAK: everything but the kick sinks into the reverb and delay */
+        if (dv) {
+            d += (((int32_t)(127 * 258 * 6 / 10) - (d < 127 * 258 * 6 / 10 ? d : 127 * 258 * 6 / 10)) * dv) >> 12;
+            r += (((int32_t)(127 * 258 * 9 / 10) - (r < 127 * 258 * 9 / 10 ? r : 127 * 258 * 9 / 10)) * dv) >> 12;
+        }
         int32_t xmax = c > d ? c : d;
         xmax = 0x7FFFFFFF / ((xmax > r ? xmax : r) | 1);   /* sends: loud chords at a high LEVEL */
         track_dist(t, b, n);

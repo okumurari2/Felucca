@@ -1111,6 +1111,7 @@ static void maku_buttons(uint32_t pressed, uint32_t notes)
         }
     }
     maku.riser = (uint8_t)((fm1_in.buttons >> panel.btn[B_SEQ]) & 1u);
+    maku.brk = (uint8_t)((fm1_in.buttons >> panel.btn[B_PLAY]) & 1u);
     if ((pressed >> panel.btn[B_ARP]) & 1u) {
         uint32_t on = !trk[0].p[P_AMODE];
         for (i = 0; i < NTRK; i++)
