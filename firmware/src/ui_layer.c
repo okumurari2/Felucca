@@ -528,10 +528,11 @@ static void layer_knob(uint32_t k, int32_t s)
     }
 }
 
-/* PLAY with GLO held open: RESTART (from the top, playing on); stopped: PLAY. 1 = done here */
+/* PLAY with GLO held open: RESTART (from the top, playing on); stopped: PLAY. 1 = done here. GLO's lock is not
+ * held: PLAY starts and stops there as in every layer (#183, Felucca 1.5: locked, PLAY restarted and never stopped) */
 static int layer_play(void)
 {
-    if (layer_open() != LAYER_GLO || chain_busy())
+    if (layer_open() != LAYER_GLO || !(fm1_in.buttons & ly_bit(LAYER_GLO)) || chain_busy())
         return 0;
     if (song.g[G_CLOCK] && song.playing) {
         ui_message("RESTART: CLK IS EXT");

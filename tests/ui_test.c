@@ -5798,6 +5798,39 @@ static int test_layer_lock(void)
     }
     bad += check("#83 FX GLO SCL EDIT double tapped: the map stays open with no button held, over the page as it was", ok);
     bad += check("  a tap of the button closes it, no page opens", okk);
+    {   /* #183: in every lock PLAY starts and stops (GLO's lock no RESTART: that needs GLO held) */
+        static const uint8_t PB[5] = {B_FX, B_GLO, B_SCL, B_EDIT, B_REC};   /* (SEQ's layer is on the SEQ pages only here) */
+        static const uint8_t PL[5] = {LAYER_FX, LAYER_GLO, LAYER_SCL, LAYER_EDIT, LAYER_REC};
+        ok = 1;
+        for (i = 0; i < 5u; i++) {
+            uint32_t k;
+            ui_power_on();
+            go_title("ENV"); frame();
+            press(PB[i]); frames(64); press(PB[i]); frames(100);
+            transport_req = 0;
+            okk = ui.lock == PL[i];
+            press(B_PLAY);                              /* stopped: PLAY */
+            okk &= transport_req == 1u;
+            events_block(CTL);
+            okk &= song.playing != 0;
+            for (k = 0; k < 2u; k++) {                  /* playing: PLAY stops, twice over */
+                press(B_PLAY);
+                okk &= transport_req == 2u;
+                events_block(CTL);
+                okk &= !song.playing && ui.lock == PL[i];
+                press(B_PLAY);
+                okk &= transport_req == 1u;
+                events_block(CTL);
+                okk &= song.playing != 0;
+            }
+            stop_transport();
+            transport_req = 0;
+            if (!okk)
+                printf("    #183: %s locked, PLAY does not start / stop\n", LAYERS[PL[i]].head);
+            ok &= okk;
+        }
+        bad += check("#183 FX GLO SCL EDIT REC locked: PLAY starts and stops (no RESTART without GLO held)", ok);
+    }
     /* the keys and KNOB 1..4 act as held */
     ui_power_on();
     go_title("ENV"); frame();

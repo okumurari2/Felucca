@@ -158,8 +158,8 @@ static inline int32_t spk_bass(int32_t m)
     sb_h2 += (u - sb_h2) >> 5;
     u -= sb_h2;
     sb_hl += (u - sb_hl) >> 3;
-    return sb_hl * 3;
-}
+    return sb_hl + (sb_hl >> 1);      /* x1.5 (#180, Felucca 1.5: x3 peaked at 1.5 .. 3.5 x a full-scale kick, the limiter */
+}                                     /* pulled the mix down up to 16 dB on each hit and the buzz took over) */
 
 static inline void master_out(int32_t *l, int32_t *r)
 {
