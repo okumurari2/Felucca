@@ -152,6 +152,7 @@ static void lcd_init(void) {}
 #include "../../firmware/src/menu_items.c"
 #include "../../firmware/src/icons.c"
 #include "../../firmware/src/ui_graph.c"
+#include "../../firmware/src/ui_maku.c"
 #include "../../firmware/src/ui_draw.c"
 #include "../../firmware/src/ui_menu.c"
 #include "../../firmware/src/ui_input.c"
@@ -272,7 +273,6 @@ static void web_frame(void)
     felucca_dbg.ui_frames++;
     ui_input();
     settings_poll();
-    autosave_poll();
     ui_leds();
     ui_draw();
 }
