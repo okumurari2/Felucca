@@ -26,6 +26,8 @@ static const char *const N_NOTE[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", 
 static const char *const N_DASH[] = {"--"};
 static const char *const N_RTYPE[] = {"ROOM", "SPRING"};   /* G_RTYPE: the reverb bus's model (fx.c) */
 static const char *const N_GO[] = {"--", "GO"};
+/* the INSERT's types (1.5, fx.c IT_*; append-only). Its three values A B C mean what the type says (fx.c) */
+static const char *const N_ITYPE[] = {"OFF", "SOFT", "HARD", "FOLD", "FUZZ", "CRUSH", "PHASR", "FLANG", "CHOR"};
 static const char *const N_SLCR[] = {"OFF", "GATE", "STUT"};             /* SL_OFF .. SL_STUT (slicer.c) */
 static const char *const N_SLDIV[] = {"1/8", "1/16", "1/32", "8T", "16T", "32T"};   /* SL_DEN */
 /* modulation matrix (mod.c): sources, destinations (E1..E8 = P_E0..P_E7: shown with the engine's labels) */
@@ -92,6 +94,12 @@ static const param_desc_t TP[P_COUNT] = {
     [P_SLPAT] = PD("PAT", F_INT, 1, 16, 1),        /* SL_PAT[] */
     [P_SLRATE] = PE("RATE", N_SLDIV, 1),
     [P_SLDEPTH] = PD("DEPTH", F_PCT, 0, 127, 127),
+    /* the INSERT (1.5, fx.c track_insert): TYPE OFF = as before */
+    [P_ITYPE] = PE("INSRT", N_ITYPE, 0),
+    [P_IA] = PD("INS A", F_PCT, 0, 127, 64),
+    [P_IB] = PD("INS B", F_PCT, 0, 127, 96),
+    [P_IC] = PD("INS C", F_PCT, 0, 127, 96),
+    [P_IMIX] = PD("MIX", F_PCT, 0, 127, 127),
 #define MSLOT(k) [P_M##k##SRC] = PE("SRC" #k, N_MSRC, 0), [P_M##k##DST] = PE("DST" #k, N_MDST, 0), \
                  [P_M##k##AMT] = PD("AMT" #k, F_BIPCT, -64, 63, 0)
     MSLOT(1), MSLOT(2), MSLOT(3), MSLOT(4),
