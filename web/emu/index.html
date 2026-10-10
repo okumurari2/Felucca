@@ -81,7 +81,8 @@ footer small { font-size: 11px; opacity: .8; }
 
 <p class="keys">
   <span><kbd>Z</kbd>–<kbd>'</kbd> <kbd>Q</kbd>–<kbd>O</kbd> keys</span>
-  <span><kbd>1</kbd>–<kbd>=</kbd> FX … REC</span>
+  <span><kbd>1</kbd>–<kbd>=</kbd> FX … REC (hold: freeze, tape stop, sweep, repeat, break…)</span>
+  <span style="white-space:normal">KNOB 1–4 = volumes · SELECT / PRESETS / ALGORITHM = the focused part's three macros · HOME held = a new world</span>
   <span><kbd>[</kbd> <kbd>]</kbd> OCT</span>
   <span><kbd>↑</kbd> <kbd>↓</kbd> SELECT</span>
   <span><kbd>←</kbd> <kbd>→</kbd> ALGORITHM</span>
@@ -91,7 +92,7 @@ footer small { font-size: 11px; opacity: .8; }
 <footer>
   <small class="version">@VERSION@@PREVIEW@</small><br>
   MAKU, built on Felucca by Leo Kuroshita, Hügelton Instruments · <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> · browser build after charlesvestal's <a href="https://github.com/charlesvestal/fm1-x0x">X0X</a> · DotGothic16 font, <a href="fonts/OFL.txt">SIL OFL 1.1</a><br>
-  <nav><a href="../installer/">Install</a><a href="https://github.com/hugelton/Felucca">Source</a></nav>
+  <nav><a href="https://github.com/okumurari2/Felucca">Source</a> · <a href="https://github.com/hugelton/Felucca">Felucca</a></nav>
   <small>M-VAVE and FM-1 are trademarks of their respective owners. Felucca is not affiliated with or endorsed by them.</small>
 </footer>
 </main>
@@ -112,6 +113,9 @@ const STORE = "felucca-emu-flash";
 // Two drawings of the same controls: WIDE after the FM-1's own layout, TALL for a phone held upright (the
 // screen larger, the keys across the whole width). Rebuilt when the orientation changes; the state stays.
 const ROW1 = ["FX", "SCL", "ENV", "LFO", "EDIT", "GLO"], ROW2 = ["HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC"];
+// what each button does on MAKU (docs/AMBIENT.md): the verb under its label
+const VERB = { FX: "FREEZE", SCL: "ROOT", ENV: "TAPE", LFO: "SWEEP", EDIT: "SHIMMER", GLO: "TEMPO",
+               HOME: "NEW", SAVE: "REPEAT", ARP: "ARP", SEQ: "RISE", PLAY: "BREAK", REC: "PICK" };
 const KNOBS = ["MASTER", "SELECT", "PRESETS", "ALGORITHM", "KNOB 1", "KNOB 2", "KNOB 3", "KNOB 4"];
 const LAYOUTS = {
   wide: {
@@ -189,8 +193,8 @@ function build(name) {
   button(L.oct[1], "OCT+");
   const [gx, gy, gw, gh, dx, dy] = L.grid;
   for (let i = 0; i < 6; i++) {
-    button([gx + i * dx, gy, gw, gh], ROW1[i]);
-    button([gx + i * dx, gy + dy, gw, gh], ROW2[i], ROW2[i] === "PLAY" ? "STOP" : "");
+    button([gx + i * dx, gy, gw, gh], ROW1[i], VERB[ROW1[i]]);
+    button([gx + i * dx, gy + dy, gw, gh], ROW2[i], VERB[ROW2[i]]);
   }
   const [x0, y0, w, h] = L.keybed;
   el("rect", { x: x0, y: y0, width: w, height: h, rx: 18, fill: "var(--tray)" });
