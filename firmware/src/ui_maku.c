@@ -6,7 +6,8 @@
  *   top right     SELECT's macro of the focused track (DENSITY: the kick's 16 steps too)
  *   bottom left   PRESETS' macro
  *   bottom right  ALGORITHM's macro
- * GLO held (SELECT is the tempo): the top right shows BPM instead. One style for every mode. The scope is drawn each
+ * A verb held (GLO tempo, SCL root, PLAY sink; ui_input.c maku_verb_now): the three quadrants show its three parameters
+ * instead (SELECT / PRESETS / ALGORITHM move them). One style for every mode. The scope is drawn each
  * frame, the other three only when something they show changes (or ui.force). */
 static int maku_knobs_on(void);
 #define MKQ 119
@@ -61,6 +62,54 @@ static void mq_macro(uint32_t j, uint32_t f, uint32_t tempo)
             cv_rect(x, 104, 5, i == ph ? 12 : 8, i == ph ? T_ACCENT : col);
         }
     }
+}
+
+/* the verbs that hold three parameters (maku.c VB_*): their names, as printed on the button where there is one */
+static const struct { const char *title, *name[3]; } MAKU_VB[VB_N] = {
+    {"", {"", "", ""}},
+    {"SINK", {"SINK", "WASH", "HUSH"}},                 /* PLAY: the reverb feeds back, the sends rise, the kick steps out */
+    {"TEMPO", {"BPM", "SWING", "DUCK"}},                /* GLO */
+    {"ROOT", {"ROOT", "SCALE", "REG"}},                 /* SCL */
+};
+static const char *const MAKU_REG[3] = {"LOW", "MID", "HIGH"};
+
+/* the value of parameter j of verb v: the text, and the gauge 0..127 */
+static int32_t maku_vb_value(uint32_t v, uint32_t j, char *b)
+{
+    int32_t g = maku.vp[v][j], i;
+    if (v == VB_GLO && j == 0u) {
+        fmt_int(b, song.g[G_BPM]);
+        return (song.g[G_BPM] - 40) * 127 / 200;
+    }
+    if (v == VB_ROOT) {
+        if (j == 0u) {
+            str_cpy(b, N_NOTE[(uint32_t)trk[MAKU_DRA].p[P_ROOT] % 12u], 8);
+            return (trk[MAKU_DRA].p[P_ROOT] % 12) * 127 / 11;
+        }
+        if (j == 1u) {
+            for (i = 0; i < (int32_t)MAKU_NSCALE - 1 && MAKU_SCALES[i] != (uint32_t)trk[MAKU_DRA].p[P_SCALE]; i++)
+                ;
+            str_cpy(b, N_SCALE[clamp(trk[MAKU_DRA].p[P_SCALE], 0, 15)], 8);
+            return i * 127 / ((int32_t)MAKU_NSCALE - 1);
+        }
+        str_cpy(b, MAKU_REG[g % 3], 8);
+        return g * 63;
+    }
+    fmt_int(b, g);
+    return g;
+}
+
+/* parameter j of the verb v held, in its quadrant (the same style as a macro) */
+static void mq_verb(uint32_t j, uint32_t v)
+{
+    char b[8];
+    int32_t g = maku_vb_value(v, j, b);
+    cv_text(8, 6, &AF_S, MAKU_ROLE[j], T_DIM);
+    if (j == 0u)                                        /* (the verb's name once, where SELECT is) */
+        cv_text(MKQ - 6 - text_w(&AF_S, MAKU_VB[v].title), 6, &AF_S, MAKU_VB[v].title, T_ACCENT);
+    cv_text(8, 24, &AF_M, MAKU_VB[v].name[j], T_MID);
+    cv_text_in(0, 48, MKQ, &AF_L, b, T_ACCENT, T_BG);
+    mq_gauge(8, 92, MKQ - 16, g, T_ACCENT);
 }
 
 static void mq_top_left(void)
@@ -121,10 +170,11 @@ static void mq_top_left(void)
 static void maku_draw(void)
 {
     static uint32_t sig;
-    uint32_t j, f = song.sel < 4u ? song.sel : 0u, tempo = ui.layer == LAYER_GLO, s;
-    s = f * 977u + tempo * 13u + (uint32_t)song.g[G_BPM] * 31u + (uint32_t)(ui.hot_t != 0u) * 7u + ui.hot_col;
+    uint32_t j, f = song.sel < 4u ? song.sel : 0u, v = ui.layer == LAYER_GLO ? VB_GLO : ui.layer == LAYER_SCL ? VB_ROOT : maku.brk ? VB_PLAY : VB_NONE, s;
+    s = f * 977u + v * 13u + (uint32_t)song.g[G_BPM] * 31u + (uint32_t)(ui.hot_t != 0u) * 7u + ui.hot_col;
     for (j = 0; j < 3u; j++)
-        s = s * 31u + maku.m[f][j];
+        s = s * 31u + maku.m[f][j] + (v ? (uint32_t)maku.vp[v][j] * 7u : 0u);
+    s = s * 31u + (uint32_t)trk[MAKU_DRA].p[P_ROOT] * 17u + (uint32_t)trk[MAKU_DRA].p[P_SCALE];
     s = s * 31u + (uint32_t)maku_kick_mask() + (song.playing ? trk[MAKU_KICK].seq_idx % 16u + 1u : 0u) * 4099u +
         maku_kick_ghosts() * 7u;
     for (j = 0; j < 4u; j++)
@@ -136,7 +186,10 @@ static void maku_draw(void)
         sig = s;
         for (j = 0; j < 3u; j++) {
             cv_begin(MKQ, MKQ, T_BG);
-            mq_macro(j, f, tempo && j == 0u);
+            if (v)
+                mq_verb(j, v);
+            else
+                mq_macro(j, f, 0u);
             cv_blit(j == 1u ? 0u : 121u, j == 0u ? 0u : 121u);
         }
         lcd_fill(119, 0, 2, 240, T_LINE);

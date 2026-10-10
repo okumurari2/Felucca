@@ -1063,9 +1063,42 @@ static int maku_knobs_on(void)
 {
     return maku.on && !ui.menu && !ui.confirm && !name_on();
 }
-static void maku_knobs(uint32_t glo)
+/* the verb whose three parameters the knobs hold now: GLO and SCL (ROOT) open as layers, PLAY is held */
+static uint32_t layer_open(void);                       /* (ui_layer.c) */
+static uint32_t maku_verb_now(void)
 {
-    uint32_t k, j;
+    uint32_t l = layer_open();
+    return l == LAYER_GLO ? VB_GLO : l == LAYER_SCL ? VB_ROOT : maku.brk ? VB_PLAY : VB_NONE;
+}
+/* SELECT / PRESETS / ALGORITHM (j = 0 / 1 / 2) turned by s in the verb v. GLO's j = 0 is the tempo (ui_input) */
+static void maku_verb_turn(uint32_t v, uint32_t j, int32_t s, uint32_t enc)
+{
+    track_t *a = &trk[MAKU_DRA];
+    uint32_t i;
+    if (v == VB_ROOT && j < 2u) {
+        if (j == 0u) {
+            a->p[P_ROOT] = (int16_t)(((int32_t)a->p[P_ROOT] + 120 + clamp(s, -12, 12)) % 12);
+        } else {
+            for (i = 0; i < MAKU_NSCALE - 1u && MAKU_SCALES[i] != (uint32_t)a->p[P_SCALE]; i++)
+                ;
+            i = (uint32_t)clamp((int32_t)i + s, 0, (int32_t)MAKU_NSCALE - 1);
+            a->p[P_SCALE] = MAKU_SCALES[i];
+        }
+        maku_follow();
+        maku.root = (uint8_t)a->p[P_ROOT];
+        maku.scale = (uint8_t)a->p[P_SCALE];
+    } else if (v == VB_ROOT) {                          /* REG: LOW / MID / HIGH */
+        maku.vp[v][2] = (uint8_t)clamp((int32_t)maku.vp[v][2] + (s > 0 ? 1 : -1), 0, 2);
+    } else if (v != VB_NONE && v < VB_N && !(v == VB_GLO && j == 0u)) {
+        maku.vp[v][j] = (uint8_t)clamp((int32_t)maku.vp[v][j] + accel(enc, s, 127), 0, 127);
+        if (v == VB_GLO)
+            maku_apply();
+    }
+    ui.force = 1;
+}
+static void maku_knobs(void)
+{
+    uint32_t k, j, v = maku_verb_now();
     int32_t s;
     for (k = 0; k < 4u; k++) {
         if ((s = panel_enc(EN_K1 + k)) == 0)
@@ -1078,11 +1111,11 @@ static void maku_knobs(uint32_t glo)
     }
     for (j = 0; j < 3u; j++) {
         uint32_t f = song.sel < 4u ? song.sel : 0u, e = j == 0u ? EN_SELECT : j == 1u ? EN_PRESET : EN_ALGO;
-        if (j == 0u && glo)
-            continue;                                   /* GLO held: SELECT is the tempo */
         if ((s = panel_enc(e)) == 0)
             continue;
-        {
+        if (v != VB_NONE) {                             /* a verb is held: its three */
+            maku_verb_turn(v, j, s, e);
+        } else {
             char b[8];
             maku_macro_set(f, j, (uint32_t)clamp((int32_t)maku.m[f][j] + accel(e, s, 127), 0, 127));
             fmt_int(b, maku.m[f][j]);
@@ -1135,7 +1168,7 @@ static void ui_input(void)
     uint32_t home, rec, seq, save;
     uint32_t oct;
     uint32_t lay, combo = 0, lytap, lkeys, glo, kq = 0, mk;
-    int32_t s, sel = 0, ks[4] = {0, 0, 0, 0};
+    int32_t s, sel = 0, ks[4] = {0, 0, 0, 0}, vk[3] = {0, 0, 0};
     static uint32_t lock_ms;                            /* BPM LOCK: the last locked SELECT turn (fm1_ms | 1; 0 none) */
     fm6_poll();                                         /* FM6: PTCH turned -> its patch */
 #if !FELUCCA_FM4
@@ -1197,8 +1230,17 @@ static void ui_input(void)
         for (k = 0; k < 4u; k++)                        /* KNOB 1..4: the layer's (ui_layer.c layer_knob) */
             if ((ks[k] = panel_enc(EN_K1 + k)) != 0)
                 combo = 1;
-        panel_enc(EN_PRESET);                           /* (a stray turn would load another sound) */
-        panel_enc(EN_ALGO);                             /* (another track: OCT- puts back the layer's track only) */
+        if (maku_knobs_on() && (ui.ly == LAYER_GLO || ui.ly == LAYER_SCL)) {   /* MAKU: GLO and ROOT hold three parameters */
+            vk[1] = panel_enc(EN_PRESET);
+            vk[2] = panel_enc(EN_ALGO);
+            if (!glo)
+                vk[0] = panel_enc(EN_SELECT);
+            if (vk[0] | vk[1] | vk[2])
+                combo = 1;
+        } else {
+            panel_enc(EN_PRESET);                       /* (a stray turn would load another sound) */
+            panel_enc(EN_ALGO);                         /* (another track: OCT- puts back the layer's track only) */
+        }
         if (glo && (sel = panel_enc(EN_SELECT)) != 0)   /* GLO + SELECT: the tempo, a combo (OCT- puts it back) */
             combo = 1;
     } else if ((kq = (uint32_t)layer_knobs_quiet()) != 0) {   /* a layer letting go: KNOB 1..4 are nobody's (#39) */
@@ -1207,6 +1249,9 @@ static void ui_input(void)
                 combo = 1;                              /* (with the button let go this frame: no tap) */
     }
     lytap = layer_gesture(now, combo);
+    for (k = 0; k < 3u; k++)                            /* (MAKU: GLO's and ROOT's knobs, once the layer is up) */
+        if (vk[k])
+            maku_verb_turn(maku_verb_now(), k, vk[k], k == 0u ? EN_SELECT : k == 1u ? EN_PRESET : EN_ALGO);
     layer_show();
     layer_keys(lkeys);
     for (k = 0; k < 4u; k++)
@@ -1416,7 +1461,7 @@ static void ui_input(void)
     mk = (uint32_t)maku_knobs_on();
     if (mk) {
         if (!lay)
-            maku_knobs(glo);
+            maku_knobs();
         kq = 1;                                         /* (the page's KNOB 1..4 below are MAKU's volumes, read above) */
     }
     if (!mk && !lay && (s = panel_enc(EN_PRESET)) != 0)

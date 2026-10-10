@@ -1160,6 +1160,11 @@ static void maku_setup(void)
     uint32_t i, j;
     maku.kfade = 4096;                                /* (the BREAK's fade-in: a new world starts with the kick full) */
     maku.dive = 0;
+    memset(maku.vp, 0, sizeof maku.vp);               /* the verbs' parameters (PLAY: SINK WASH HUSH; GLO: -, SWING, DUCK; ROOT: -, -, REG) */
+    maku.vp[VB_PLAY][0] = 100;
+    maku.vp[VB_PLAY][1] = maku.vp[VB_PLAY][2] = 127;
+    maku.vp[VB_GLO][2] = 64;
+    maku.vp[VB_ROOT][2] = 1;
     for (i = 0; i < NTRK; i++)
         maku_sound(i, MAKU_R[i].pre);
     trk[MAKU_DRA].p[P_LRATE] = 36;                    /* SWAY's slow LFO on the drone's filter */

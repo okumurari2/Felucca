@@ -297,6 +297,14 @@ static void layer_tap(uint32_t l)
 {
     uint8_t m = ui.msg_t;
     int acted;
+    if (maku.on && l == LAYER_SCL) {                    /* MAKU: ROOT tapped, the scale goes on: major, minor, major, ... */
+        uint32_t n = maku_scale_next((uint32_t)trk[MAKU_DRA].p[P_SCALE]);
+        trk[MAKU_DRA].p[P_SCALE] = (int16_t)n;
+        maku_follow();
+        maku.scale = (uint8_t)n;
+        ui_say("SCALE: ", N_SCALE[n]);
+        return;
+    }
     lys.nv.home = ui.home;                              /* (#83: the page this tap leaves, for a double tap) */
     lys.nv.page = ui.page;
     lys.nv.act = ui.act;
@@ -452,8 +460,6 @@ static void layer_key(uint32_t l, uint32_t k)
         if (key_black(k)) {
             if (p < NTRK)
                 trk[p].p[P_MUTE] = (int16_t)!trk[p].p[P_MUTE];
-        } else if (p < NTRK) {
-            lys.solo |= 1u << k;                        /* (layer_masks: perf_solo while held) */
         } else if (p == 4u) {
             for (i = 0; i < NTRK; i++)
                 trk[i].p[P_MUTE] = 0;
@@ -486,11 +492,7 @@ static void layer_keys(uint32_t keys)
     for (k = 0; keys && k < 27u; k++)
         if ((keys >> k) & 1u)
             layer_key(l, k);
-    lys.solo &= kb_layer;
-    for (k = 0; k < 27u; k++)
-        if ((lys.solo >> k) & 1u)
-            s |= 1u << key_place(k);
-    perf_solo = (uint8_t)s;
+    perf_solo = (uint8_t)s;                             /* (no solo: the keys of GLO mute and tap the tempo only) */
 }
 
 /* KNOB 1..4 in the open layer: its own (FX macros, GLO levels, EDIT's sound), else the four of its page */
@@ -501,11 +503,7 @@ static void layer_knob(uint32_t k, int32_t s)
         if (k == 3u && !perf_harm_on())
             s = -s;                                     /* DEPTH (100 - perf_k[3]) rises to the right (#40: it fell) */
         perf_k[k] = (int8_t)clamp(perf_k[k] + accel(EN_K1 + k, s, k ? 100 : 200), k ? 0 : -100, 100);   /* (#126) */
-    } else if (l == LAYER_GLO) {                        /* T1..T4 LEVEL, recorded as on MIXER */
-        int16_t *vp = &trk[k].p[P_LEVEL];
-        *vp = (int16_t)clamp(*vp + accel(EN_K1 + k, s, TP[P_LEVEL].max - TP[P_LEVEL].min), TP[P_LEVEL].min,
-                             TP[P_LEVEL].max);
-        motion_capture(&trk[k], P_LEVEL, *vp);
+    } else if (l == LAYER_GLO || (maku.on && l == LAYER_SCL)) {   /* no gain here (MAKU: the three knobs are the verb's, ui_input.c) */
     } else if (l == LAYER_EDIT) {                       /* ENG, No., FAV */
         if (k == 0u)
             edit_load(eng_step(TSEL->eng_req, s), 0);
@@ -628,8 +626,8 @@ static uint32_t layer_leds(uint32_t *br)
             can = e < PF_N && ((ok >> e) & 1u);
             on = can && ((held >> e) & 1u);
         } else if (l == LAYER_GLO) {                    /* sounding lit; SOLO held lit, the others, C4, F4 breathe */
-            on = b ? p < NTRK && glo_sounding(p) : p < NTRK && ((lys.solo >> k) & 1u);
-            can = !b && (p < NTRK || p == 4u || (p == 7u && !song.g[G_CLOCK]));
+            on = b && p < NTRK && glo_sounding(p);
+            can = !b && (p == 4u || (p == 7u && !song.g[G_CLOCK]));
         } else if (l == LAYER_SCL) {                    /* the root lit, the scale's notes breathe */
             e = (k + 5u + 12u - root) % 12u;
             on = e == 0u;
@@ -781,10 +779,6 @@ static void layer_glo(void)
 {
     uint32_t e;
     char n[3] = {0, 0, 0};
-    for (e = 0; e < NTRK; e++) {                        /* F3 .. B3: SOLO while held */
-        n[0] = W_NOTE[e];
-        lcell(LC_X(e), 4, LC_H, n, trk_icon(e, 0), 0, "SOLO", (perf_solo >> e) & 1u ? LS_HELD : LS_OFF, 1);
-    }
     n[0] = 'C';
     lcell(LC_X(0), 50, LC_H, n, ICON_MUTE, 0, "ALL", LS_OFF, 0);   /* (unmute all) */
     n[0] = 'F';
@@ -914,12 +908,9 @@ static void layer_cards(uint32_t l)
             fmt_int(val, 100 - perf_k[3]);
             draw_column(3, "DEPTH", val, "%", VAL(3u), (100 - perf_k[3]) * 10, ICON_MIX);
         }
-    } else if (l == LAYER_GLO) {                        /* T1..T4 LEVEL (the track's icon; muted: dim) */
-        for (c = 0; c < NTRK; c++) {
-            param_format(&TP[P_LEVEL], trk[c].p[P_LEVEL], val, &unit);
-            draw_column(c, "LEVEL", val, unit, glo_sounding(c) ? VAL(c) : T_DIM, RATIO(&TP[P_LEVEL], trk[c].p[P_LEVEL]),
-                        trk_icon(c, 1));
-        }
+    } else if (l == LAYER_GLO) {                        /* no gain here: an empty card (the tempo is SELECT's) */
+        for (c = 0; c < NTRK; c++)
+            draw_column(c, "", "", "", T_THEME, -1, ICON_NONE);
     } else if (l == LAYER_EDIT) {
         engine_columns();
     } else if (l == LAYER_REC) {                        /* CLICK COUNT-IN LEVEL, an empty card */

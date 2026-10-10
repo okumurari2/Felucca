@@ -28,6 +28,12 @@
 #define MAKU_REST 255u
 #define MAKU_TABLE 32u
 
+/* The verbs that hold three parameters of their own: while the button is held the screen shows them and SELECT / PRESETS /
+ * ALGORITHM move them (a verb's values stay until the next world). HOME has none. */
+enum { VB_NONE, VB_PLAY, VB_GLO, VB_ROOT, VB_N };
+#define MAKU_NSCALE 8u
+static const uint8_t MAKU_SCALES[MAKU_NSCALE] = {1, 2, 9, 3, 4, 8, 5, 6};   /* MAJ MIN LYD DOR MIX PHRY PEN MPEN: major, minor, major, minor, ... */
+
 static struct {
     uint8_t on;
     uint8_t dens;                /* 0..127 */
@@ -45,6 +51,7 @@ static struct {
     uint8_t frame_on, frame_root; /* a key change by fifths (maku_fifth) while an arp run plays: the run goes on in the old ROOT's
                                   * frame, with the new key signature, until it ends */
     uint8_t brk;                 /* PLAY is down: the BREAK */
+    uint8_t vp[VB_N][3];         /* the verbs' parameters, 0..127 (PLAY: SINK, WASH, HUSH; GLO: -, SWING, DUCK; ROOT: -, -, REG 0..2) */
     int32_t dive;                /* the BREAK's dive, Q12: the rest sinks into reverb and reverse delay; it comes up slowly */
     int32_t kfade;               /* the kick's level after a BREAK, Q12: out fast, back in slowly */
     int32_t duck;                /* the kick's dip of the other tracks' level, Q12 (4096: none); it recovers in maku_block */
@@ -79,6 +86,21 @@ static uint32_t maku_note_in(const track_t *t, uint32_t root, uint32_t deg, uint
 static uint32_t maku_note(const track_t *t, uint32_t deg, uint32_t base)
 {
     return maku_note_in(t, (uint32_t)t->p[P_ROOT], deg, base);
+}
+/* the drones' register (ROOT held, REG): LOW / MID / HIGH, an octave apart (MID is as designed) */
+static uint32_t maku_low(uint32_t base)
+{
+    return base + 12u * (uint32_t)maku.vp[VB_ROOT][2] - 12u;
+}
+
+/* the scale after the one in use: major and minor families take turns (MAKU_SCALES); a scale outside the list starts it over */
+static uint32_t maku_scale_next(uint32_t cur)
+{
+    uint32_t i;
+    for (i = 0; i < MAKU_NSCALE; i++)
+        if (MAKU_SCALES[i] == cur)
+            return MAKU_SCALES[(i + 1u) % MAKU_NSCALE];
+    return MAKU_SCALES[0];
 }
 
 /* a key change by fifths is a change of the key signature: note n, a note of the scale at ROOT `from`, stays where it is
@@ -118,6 +140,13 @@ static const uint8_t MAKU_PHRASE[MAKU_TABLE] = {              /* ARP: two 16-pla
 
 /* the kick's chance (percent) on step idx of 16 at density d: each rung adds steps, and fades them in so the
  * pulse grows rather than switches. d<4: silence */
+/* the kick's dip of the other tracks (Q12, below 4096), scaled by GLO's DUCK (64 = as designed, 0 = none, 127 = twice) */
+static int32_t maku_dip(int32_t dip)
+{
+    int32_t d = 4096 - (4096 - dip) * (int32_t)maku.vp[VB_GLO][2] / 64;
+    return d < 0 ? 0 : d;
+}
+
 static uint32_t maku_kick_chance(uint32_t idx, uint32_t d)
 {
     if (idx == 0)
@@ -267,7 +296,7 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             out->hit = 1u;
             out->vel = (uint8_t)(vel > 127u ? 127u : vel);
             if (d >= 40u) {
-                int32_t dip = 4096 - (int32_t)((d - 40u) * 1800u / 87u);
+                int32_t dip = maku_dip(4096 - (int32_t)((d - 40u) * 1800u / 87u));
                 if (dip < maku.duck)
                     maku.duck = dip;
             }
@@ -281,7 +310,7 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         vel = (uint32_t)((int32_t)vel + (int32_t)(rng() % (1u + d / 8u)) - (int32_t)(d / 16u));   /* the wander grows with density */
         out->hit = 1u;                              /* lane 0: the kick */
         if (d >= 40u) {                             /* ducking: the drones sink under it, deeper as it grows */
-            int32_t dip = 4096 - (int32_t)((d - 40u) * 1800u / 87u);   /* down to 0.56 at DENSITY 127 */
+            int32_t dip = maku_dip(4096 - (int32_t)((d - 40u) * 1800u / 87u));   /* down to 0.56 at DENSITY 127 */
             if (dip < maku.duck)
                 maku.duck = dip;
         }
@@ -298,9 +327,9 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             if (nv > 3u && d >= 90u)
                 nv = 3u;                                /* (dense and open: the voices run out) */
             for (k = 0; k < 3u && k < nv; k++)
-                out->note[k] = (uint8_t)maku_note(t, c[k], 36u);
+                out->note[k] = (uint8_t)maku_note(t, c[k], maku_low(36u));
             if (nv > 3u)
-                out->note[k++] = (uint8_t)maku_note(t, c[0] + 9u, 36u);
+                out->note[k++] = (uint8_t)maku_note(t, c[0] + 9u, maku_low(36u));
             out->n = (uint8_t)k;
         }
         out->vel = (uint8_t)(78u - d / 4u - (idx / 19u) * 6u);
@@ -311,12 +340,12 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         if (idx == 0)
             maku.cyc_b++;
         if (idx == 0) {
-            out->note[0] = (uint8_t)maku_note(t, MAKU_SHIM_A[maku.cyc_b % 6u], 36u);
+            out->note[0] = (uint8_t)maku_note(t, MAKU_SHIM_A[maku.cyc_b % 6u], maku_low(36u));
             out->n = 1;
         } else {
             uint32_t lo = MAKU_SHIM_B[maku.cyc_b % 6u];
-            out->note[0] = (uint8_t)maku_note(t, lo, 48u);
-            out->note[1] = (uint8_t)maku_note(t, lo + 4u, 48u);
+            out->note[0] = (uint8_t)maku_note(t, lo, maku_low(48u));
+            out->note[1] = (uint8_t)maku_note(t, lo + 4u, maku_low(48u));
             out->n = 2;
         }
         out->vel = (uint8_t)(58u - d / 5u);
@@ -370,7 +399,7 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
 static void maku_apply(void)
 {
     uint32_t d = maku.dens;
-    trk[MAKU_ARP].p[P_SSWING] = (int16_t)(d * 24u / 127u);   /* the arp drifts off the grid as it gets dense */
+    trk[MAKU_ARP].p[P_SSWING] = (int16_t)(d * 24u / 127u + (uint32_t)maku.vp[VB_GLO][1] * 40u / 127u);   /* the arp drifts off the grid as it gets dense; GLO's SWING adds to it */
 }
 
 static void maku_set_density(uint32_t d)
@@ -427,9 +456,10 @@ static __attribute__((noinline)) void maku_block(void)
     } else {
         maku.rise_q = (uint16_t)(maku.rise_q > 60u ? maku.rise_q - 60u : 0u);
     }
-    if (maku.brk) {                                                /* PLAY held: ~1.5 s down, the kick out in ~50 ms */
+    if (maku.brk) {                                                /* PLAY held: ~1.5 s down, the kick out in ~50 ms (HUSH: how far) */
+        int32_t tgt = 4096 - (int32_t)maku.vp[VB_PLAY][2] * 4096 / 127;
         maku.dive = maku.dive + 3 > 4096 ? 4096 : maku.dive + 3;
-        maku.kfade = maku.kfade > 64 ? maku.kfade - 64 : 0;
+        maku.kfade = maku.kfade > tgt + 64 ? maku.kfade - 64 : tgt;
     } else {                                                       /* let go: the kick returns over ~3 s, the dive lifts with it */
         maku.dive = maku.dive > 1 ? maku.dive - 1 : 0;
         maku.kfade = maku.kfade + 1 > 4096 ? 4096 : maku.kfade + 1;
@@ -459,8 +489,14 @@ static int32_t maku_gain(uint32_t i)
     return i == MAKU_ARP ? 4096 - (4096 - maku.duck) / 2 : maku.duck;
 }
 
-/* the BREAK's depth for fx.c (Q12) */
+/* the BREAK's depth for fx.c (Q12): the sends and the reverse swell sink as far as PLAY's WASH says */
 static int32_t maku_dive(void)
 {
-    return maku.on ? maku.dive : 0;
+    return maku.on ? maku.dive * (int32_t)maku.vp[VB_PLAY][1] / 127 : 0;
+}
+
+/* the BREAK's pull on the reverb for fx.c (Q12): its tail feeds back harder the longer PLAY is held, as far as SINK says */
+static int32_t maku_sink(void)
+{
+    return maku.on ? maku.dive * (int32_t)maku.vp[VB_PLAY][0] / 127 : 0;
 }
