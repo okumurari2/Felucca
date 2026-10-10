@@ -1187,6 +1187,8 @@ static void maku_world(uint32_t seed)
 {
     static const uint8_t SC[] = {2, 3, 4, 5, 6, 9};          /* MIN DOR MIX PEN MPEN LYD */
     uint32_t i, j;
+    maku.seed = seed;
+    maku.world_n++;
     rng_state = seed ? seed : 0x1234567u;
     for (i = 0; i < 4u; i++)
         (void)rng();                                          /* (a xorshift shows its seed for a few draws) */

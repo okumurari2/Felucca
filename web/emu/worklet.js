@@ -55,7 +55,7 @@ if (typeof registerProcessor === "function") {
           ex.web_nor_erase();
           restoreSectors(new Uint8Array(ex.memory.buffer, ex.web_nor(), ex.web_nor_size()), m.sectors);
           ex.web_master(m.master ?? 700);
-          if (ex.web_set_seed) ex.web_set_seed((Math.random() * 4294967296) >>> 0);
+          if (ex.web_set_seed) ex.web_set_seed(m.seed >>> 0 || (Math.random() * 4294967296) >>> 0);   // #seed=N: that world again
           ex.web_boot();
           this.ex = ex;
           this.sentWrites = ex.web_flash_writes_count();
@@ -71,7 +71,28 @@ if (typeof registerProcessor === "function") {
       else if (m.type === "enc") ex.web_enc(m.role, m.n | 0);
       else if (m.type === "master") ex.web_master(m.value | 0);
       else if (m.type === "midi") ex.web_midi(m.data[0] | 0, m.data[1] | 0, m.data[2] | 0);
+      else if (m.type === "snap") this.snap(m.id);
       else if (m.type === "visible") this.period = m.on ? 1 / 30 : 1 / 4;
+    }
+
+
+    // The rating log (docs/VOICES_RATING.md): what is sounding now, named. Layout: web_snapshot in felucca_web.c.
+    snap(id) {
+      const ex = this.ex, mem = ex.memory.buffer;
+      const head = ex.web_snap_info(0), nm = ex.web_snap_info(1), np = ex.web_snap_info(2), total = ex.web_snap_info(3);
+      const w = new Int32Array(mem, ex.web_snapshot(), total).slice();
+      const str = (p) => { const b = new Uint8Array(mem, p, 16); let n = 0; while (b[n]) n++; return new TextDecoder().decode(b.subarray(0, n)); };
+      const tracks = [];
+      let k = head + nm;
+      for (let t = 0; t < 4; t++, k += 2 + np) {
+        const labels = [];
+        for (let j = 0; j < np; j++) labels.push(str(ex.web_param_label(t, j)));
+        tracks.push({ eng: w[k], voice: w[k + 1], labels, p: Array.from(w.subarray(k + 2, k + 2 + np)) });
+      }
+      this.port.postMessage({ type: "snap", id, data: {
+        layout: w[0], catalog: w[1], seed: w[2] >>> 0, world: w[3], bpm: w[4], root: w[5], scale: w[6],
+        dens: w[7], dens_eff: w[8], open: w[9], loose: w[10], focus: w[11], perf_held: w[12], flags: w[13],
+        world_age_ms: w[14], macros: Array.from(w.subarray(head, head + nm)), tracks } });
     }
 
     publish() {

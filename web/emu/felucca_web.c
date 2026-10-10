@@ -237,7 +237,7 @@ static void cdc_task(void) {}
 #undef usb_detach
 
 /* --------------------------------------------------------- the device --- */
-static uint32_t web_booted, web_boot_ms, web_last_frame, web_seed;
+static uint32_t web_booted, web_boot_ms, web_last_frame, web_seed, web_world_ms, web_world_seen;
 
 /* main.c fm1_main's boot, up to the main loop (no USB, no UART, no panel setup) */
 static void web_power_on(void)
@@ -271,6 +271,10 @@ static void web_frame(void)
     if (b > 0)
         song.batt_raw = song.batt_raw ? song.batt_raw + (b - song.batt_raw) / 32 : b;
     master_poll();
+    if (maku.world_n != web_world_seen) {         /* a new world (boot, HOME held): the rating log counts its age from here */
+        web_world_seen = maku.world_n;
+        web_world_ms = fm1_ms;
+    }
     felucca_dbg.ui_frames++;
     ui_input();
     settings_poll();
@@ -468,6 +472,54 @@ EXPORT void web_test_heavy(void)
         put_step(&trk[3], i, k, n, ST_NOTE, 0);
     }
     ui.force = 1;
+}
+
+
+/* The rating log (docs/VOICES_RATING.md): everything that decides what is sounding now, as int32 for the page to name.
+ * Head, then the 12 macros, then per track {engine, catalog voice, P_COUNT raw parameters}. web_snap_info says the layout. */
+#define SNAP_HEAD 16u
+#define MAKU_CATALOG 1u                         /* the voice catalog's version: ratings of other versions are not compared */
+static int32_t web_snap[SNAP_HEAD + 12u + 4u * (2u + P_COUNT)];
+EXPORT int32_t *web_snapshot(void)
+{
+    int32_t *o = web_snap;
+    uint32_t i, j, k = 0;
+    o[k++] = 1;                                 /* layout version */
+    o[k++] = (int32_t)MAKU_CATALOG;
+    o[k++] = (int32_t)maku.seed;
+    o[k++] = maku.world_n;
+    o[k++] = song.g[G_BPM];
+    o[k++] = trk[MAKU_DRA].p[P_ROOT];
+    o[k++] = trk[MAKU_DRA].p[P_SCALE];
+    o[k++] = maku.dens;
+    o[k++] = (int32_t)maku_eff();
+    o[k++] = maku.open;
+    o[k++] = maku.loose;
+    o[k++] = song.sel;                          /* the focused track */
+    o[k++] = (int32_t)perf_held;                /* the effects held now (PF_*) */
+    o[k++] = (int32_t)(maku.brk | maku.riser << 1 | maku.rec << 2);
+    o[k++] = (int32_t)(fm1_ms - web_world_ms);  /* ms since this world began */
+    o[k++] = 0;
+    for (i = 0; i < 4u; i++)
+        for (j = 0; j < 3u; j++)
+            o[k++] = maku.m[i][j];
+    for (i = 0; i < 4u; i++) {
+        o[k++] = trk[i].eng_req;
+        o[k++] = maku.voice[i];
+        for (j = 0; j < P_COUNT; j++)
+            o[k++] = trk[i].p[j];
+    }
+    return o;
+}
+EXPORT uint32_t web_snap_info(uint32_t what)    /* 0 head, 1 macros, 2 P_COUNT, 3 words in all */
+{
+    return what == 0 ? SNAP_HEAD : what == 1 ? 12u : what == 2 ? (uint32_t)P_COUNT : (uint32_t)(sizeof web_snap / 4u);
+}
+/* parameter j's label ("ATK", "REV", an engine's own E0..E7 by the track's engine) for the log's column names */
+EXPORT const char *web_param_label(uint32_t track, uint32_t j)
+{
+    const engine_t *e = ENGINES[eng_idx(trk[track % 4u].eng_req)];
+    return j >= P_COUNT ? "" : j >= P_E0 ? e->edit[j - P_E0].label : TP[j].label;
 }
 
 EXPORT uint32_t web_test_user_preset(uint32_t i) { return (uint32_t)up_used(i); }

@@ -45,6 +45,9 @@ static struct {
     uint8_t brk;                 /* PLAY is down: the BREAK */
     int32_t dive;                /* the BREAK's dive, Q12: the rest sinks into reverb and reverse delay; it comes up slowly */
     int32_t kfade;               /* the kick's level after a BREAK, Q12: out fast, back in slowly */
+    uint32_t seed;               /* the seed of this world (maku_world): the same seed and catalog give the same world */
+    uint16_t world_n;            /* worlds made since power-on (the emulator's rating log names a rating by it) */
+    uint8_t voice[4];            /* the catalog row each track plays (MAKU_VOICES); 0xFF: none */
     int32_t duck;                /* the kick's dip of the other tracks' level, Q12 (4096: none); it recovers in maku_block */
 } maku;
 
