@@ -88,24 +88,34 @@ static int setup(void)
 static int kick(void)
 {
     int bad = 0;
-    uint32_t d, last = 0, per[5] = {0}, n, bars = 40u;
-    static const uint32_t D[5] = {0, 20, 60, 100, 127};
-    for (d = 0; d < 5u; d++) {
+    uint32_t d, last = 0, orn = 0, per[6] = {0}, n, bars = 40u;
+    static const uint32_t D[6] = {0, 20, 60, 95, 96, 127};
+    for (d = 0; d < 6u; d++) {
         start(D[d]);
         sim(bars * BAR_STEPS);
         per[d] = nhits[0];
     }
-    printf("ui:   kick hits in %u bars at DENSITY 0 20 60 100 127: %u %u %u %u %u\n", bars, per[0], per[1], per[2], per[3], per[4]);
+    printf("ui:   hits in %u bars at DENSITY 0 20 60 95 96 127: %u %u %u %u %u %u\n", bars, per[0], per[1], per[2], per[3], per[4], per[5]);
     bad += check("KICK: DENSITY 0 is silent", per[0] == 0u);
     bad += check("  DENSITY 20: about once a bar at most", per[1] > 0u && per[1] <= bars);
     bad += check("  DENSITY 60: more than 20, at most 2 a bar", per[2] > per[1] && per[2] <= 2u * bars);
-    bad += check("  DENSITY 100: more again, at most 4 a bar", per[3] > per[2] && per[3] <= 4u * bars);
-    bad += check("  DENSITY 127: every beat, exactly 4 a bar", per[4] == 4u * bars);
-    start(127);
+    bad += check("  DENSITY 95: more again, at most 4 a bar, no ornaments yet", per[3] > per[2] && per[3] <= 4u * bars);
+    bad += check("  DENSITY 96: the four on the floor, exactly 4 a bar", per[4] == 4u * bars);
+    start(96);
     sim(BAR_STEPS);
     for (n = 0; n < nhits[0]; n++)
         last |= 1u << hits[0][n].step;
     bad += check("  .. on steps 0 4 8 12 (the 16-step time axis)", last == (1u | 1u << 4 | 1u << 8 | 1u << 12));
+    start(127);
+    sim(bars * BAR_STEPS);
+    last = 0;
+    for (n = 0; n < nhits[0]; n++)
+        if (hits[0][n].step % 4u)
+            orn |= 1u << hits[0][n].step;
+        else
+            last |= 1u << hits[0][n].step;
+    bad += check("  DENSITY 127: the four stays certain, ornaments come on top (the off-beats at least)",
+                 last == (1u | 1u << 4 | 1u << 8 | 1u << 12) && (orn & 0x4444u) == 0x4444u && nhits[0] > per[4]);
     return bad;
 }
 
@@ -410,17 +420,13 @@ static int kickgrid(void)
                  (m & maku_kick_mask()) == maku_kick_mask() && maku_kick_mask() == 0x1115u);
     bad += check("  ghosts are not stored", maku_kick_mask() == 0x1115u);
     bad += check("  ghost map excludes the set steps", (maku_kick_ghosts() & maku_kick_mask()) == 0u);
-    bad += check("OPS: rotate", maku_kick_op(0x0001u, KO_LEFT, 0) == 0x8000u && maku_kick_op(0x8000u, KO_RIGHT, 0) == 0x0001u);
-    bad += check("  invert / four / off / clear", maku_kick_op(0x00FFu, KO_INVERT, 0) == 0xFF00u &&
-                 maku_kick_op(5, KO_FOUR, 0) == 0x1111u && maku_kick_op(5, KO_OFF, 0) == 0x4444u && maku_kick_op(5, KO_CLEAR, 0) == 0u);
     {
-        uint32_t ok = 1, r;
-        for (r = 0; r < 40u; r++) {
-            uint32_t a = maku_kick_op(0x1111u, KO_ADD, r), b = maku_kick_op(0x1111u, KO_THIN, r);
-            ok &= __builtin_popcount(a) == 5 && (a & 0x1111u) == 0x1111u && __builtin_popcount(b) == 3 && (b & ~0x1111u) == 0u;
+        uint32_t ok = 1, k;
+        for (k = 0; k < 8u; k++) {
+            uint32_t ty = (uint32_t)DRUM_GM[MAKU_PAD[k] - 35u][0];
+            ok &= ty == DVT_SNARE || ty == DVT_CLAP || ty == DVT_HATC || ty == DVT_HATO || ty == DVT_CYM;
         }
-        ok &= maku_kick_op(0, KO_THIN, 3) == 0 && maku_kick_op(0xFFFFu, KO_ADD, 3) == 0xFFFFu;
-        bad += check("  add one / thin one at random, nothing past empty or full", ok);
+        bad += check("PADS: the eight black keys are noise sounds (hats, clap, snare, cymbals), not kick or tones", ok);
     }
     song.sel = 1;
     bad += check("  another track selected: not the kick's grid", !maku_kick_grid());

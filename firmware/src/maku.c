@@ -116,18 +116,41 @@ static const uint8_t MAKU_PHRASE[MAKU_TABLE] = {              /* ARP: two 16-pla
     9, 11, 255, 7, 14, 255, 11, 9, 7, 255, 9, 11, 14, 255, 11, 255,
 };
 
+/* DENSITY from which the four on the floor is certain (100 %); above it DENSITY adds ornaments instead */
+#define MAKU_FOUR 96u
+
 /* the kick's chance (percent) on step idx of 16 at density d: each rung adds steps, and fades them in so the
- * pulse grows rather than switches. d<4: silence */
+ * pulse grows rather than switches. d<4: silence; d >= MAKU_FOUR: steps 0 4 8 12, always */
 static uint32_t maku_kick_chance(uint32_t idx, uint32_t d)
 {
     if (idx == 0)
         return d < 4u ? 0u : d < 40u ? 25u + (d - 4u) * 75u / 36u : 100u;
     if (idx == 8u)
-        return d < 40u ? 0u : d < 80u ? (d - 40u) * 100u / 40u : 100u;
+        return d < 40u ? 0u : d < 68u ? (d - 40u) * 100u / 28u : 100u;
     if (!(idx & 3u))                                /* 4, 12 */
-        return d < 80u ? 0u : (d - 80u) * 100u / 47u > 100u ? 100u : (d - 80u) * 100u / 47u;
+        return d < 68u ? 0u : d < MAKU_FOUR ? (d - 68u) * 100u / 28u : 100u;
     return 0u;
 }
+
+/* the ornaments above the four on the floor: noise lanes of the kick's own DRUM track, on the steps the kick leaves
+ * free. Each fades in over its own stretch of DENSITY above MAKU_FOUR; returns the lane bit (0 = none) and the chance */
+static uint32_t maku_orn(uint32_t idx, uint32_t d, uint32_t *chance)
+{
+    uint32_t over = d > MAKU_FOUR ? d - MAKU_FOUR : 0u;
+    *chance = 0;
+    if (idx >= 16u || !(idx & 3u))
+        return 0;
+    if ((idx & 3u) == 2u) {                         /* the off-beat: the open hat, certain at 127 */
+        *chance = over * 100u / (127u - MAKU_FOUR);
+        return 1u << 4;
+    }
+    *chance = over > 8u ? (over - 8u) * 60u / 23u : 0u;   /* the other 16ths: the closed hat */
+    return 1u << 3;
+}
+
+/* the kick's black keys: eight noise pads (GM notes, low to high: pedal hat, closed hat, tambourine-ish hat, open hat,
+ * clap, snare, two cymbals) played on the kick's own DRUM track */
+static const uint8_t MAKU_PAD[8] = {44, 42, 54, 46, 39, 38, 55, 49};
 
 
 /* the three parameters of each track (docs/AMBIENT.md): SELECT, PRESETS and ALGORITHM each own one macro, 0..127,
@@ -206,35 +229,6 @@ static uint32_t maku_kick_ghosts(void)
     return m & ~maku_kick_mask();
 }
 
-/* the black keys on the kick's grid: what a pattern of 16 becomes (bit i = step i). Pure: the caller stores it */
-enum { KO_LEFT, KO_RIGHT, KO_INVERT, KO_THIN, KO_ADD, KO_FOUR, KO_OFF, KO_CLEAR, KO_N };
-static uint32_t maku_kick_op(uint32_t m, uint32_t op, uint32_t r)
-{
-    uint32_t i, n, pick;
-    m &= 0xFFFFu;
-    switch (op) {
-    case KO_LEFT: return ((m >> 1) | (m << 15)) & 0xFFFFu;
-    case KO_RIGHT: return ((m << 1) | (m >> 15)) & 0xFFFFu;
-    case KO_INVERT: return ~m & 0xFFFFu;
-    case KO_FOUR: return 0x1111u;                   /* steps 1 5 9 13: four on the floor */
-    case KO_OFF: return 0x4444u;                    /* steps 3 7 11 15: the off-beat */
-    case KO_CLEAR: return 0;
-    case KO_THIN:                                   /* one hit fewer, at random */
-    case KO_ADD:                                    /* one more */
-        n = (uint32_t)__builtin_popcount(op == KO_THIN ? m : ~m & 0xFFFFu);
-        if (!n)
-            return m;
-        pick = r % n;
-        for (i = 0; i < 16u; i++)
-            if (((op == KO_THIN ? m : ~m) >> i) & 1u) {
-                if (!pick--)
-                    return m ^ (1u << i);
-            }
-        return m;
-    }
-    return m;
-}
-
 /* DENSITY as played: the knob plus the riser */
 static uint32_t maku_eff(void)
 {
@@ -259,34 +253,38 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
     memset(out, 0, sizeof *out);
     out->time = ST_NOTE;
     switch (i) {
-    case MAKU_KICK:
+    case MAKU_KICK: {
+        uint32_t hit = 0, oc, ol;
         if (idx >= 16u)
             return 0;
+        vel = 0;
         if ((maku_kick_mask() >> idx) & 1u) {       /* a step set by hand (the grid) always plays; DENSITY only adds ghosts */
             vel = 96u + ((step_accents(&t->step[idx]) & 1u) ? 24u : 0u);
-            out->hit = 1u;
-            out->vel = (uint8_t)(vel > 127u ? 127u : vel);
-            if (d >= 40u) {
-                int32_t dip = 4096 - (int32_t)((d - 40u) * 1800u / 87u);
-                if (dip < maku.duck)
-                    maku.duck = dip;
-            }
-            return 1;
+            hit = 1u;
+        } else if ((uint32_t)(rng() % 100u) < maku_kick_chance(idx, d)) {
+            vel = 30u + d * 80u / 127u;
+            if (idx == 0 && d >= 40u)
+                vel += 10u;
+            vel = (uint32_t)((int32_t)vel + (int32_t)(rng() % (1u + d / 8u)) - (int32_t)(d / 16u));   /* the wander grows with density */
+            hit = 1u;                               /* lane 0: the kick */
         }
-        if ((uint32_t)(rng() % 100u) >= maku_kick_chance(idx, d))
-            return 0;
-        vel = 30u + d * 80u / 127u;
-        if (idx == 0 && d >= 40u)
-            vel += 10u;
-        vel = (uint32_t)((int32_t)vel + (int32_t)(rng() % (1u + d / 8u)) - (int32_t)(d / 16u));   /* the wander grows with density */
-        out->hit = 1u;                              /* lane 0: the kick */
-        if (d >= 40u) {                             /* ducking: the drones sink under it, deeper as it grows */
+        if (hit && d >= 40u) {                      /* ducking: the drones sink under it, deeper as it grows */
             int32_t dip = 4096 - (int32_t)((d - 40u) * 1800u / 87u);   /* down to 0.56 at DENSITY 127 */
             if (dip < maku.duck)
                 maku.duck = dip;
         }
+        ol = maku_orn(idx, d, &oc);                 /* above the four on the floor: noise ornaments (hats) */
+        if (ol && oc && (uint32_t)(rng() % 100u) < oc) {
+            hit |= ol;
+            if (!vel)
+                vel = 26u + (d - MAKU_FOUR) * 40u / (127u - MAKU_FOUR) + (uint32_t)(rng() % 12u);
+        }
+        if (!hit)
+            return 0;
+        out->hit = (uint8_t)hit;
         out->vel = (uint8_t)(vel > 127u ? 127u : vel);
         return 1;
+    }
     case MAKU_DRA:
         if (idx % 19u)
             return 0;
@@ -297,6 +295,8 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             uint32_t k, nv = 2u + maku.open / 43u;       /* OPEN: 2 voices .. root, 5th, octave and the 9th above */
             if (nv > 3u && d >= 90u)
                 nv = 3u;                                /* (dense and open: the voices run out) */
+            if (nv > 2u && d >= MAKU_FOUR + 12u)
+                nv = 2u;                                /* (and the hats of the ornaments take a voice: root and 5th only) */
             for (k = 0; k < 3u && k < nv; k++)
                 out->note[k] = (uint8_t)maku_note(t, c[k], 36u);
             if (nv > 3u)

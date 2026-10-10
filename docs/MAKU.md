@@ -93,7 +93,7 @@ OFF は同じ行を OFF にするだけです。ただし**音色とパターン
 
 すべて `firmware/src/maku.c` と `firmware/src/ui.c` の `maku_setup()` にあります。
 
-- キックの段階の境目: `maku_kick_chance`(4 / 40 / 80)
+- キックの段階の境目: `maku_kick_chance`(4 / 40 / 68、`MAKU_FOUR` = 96 で4つ打ちが100%)。その上の装飾音: `maku_orn`
 - 和音・きらめき・フレーズ: `MAKU_CHORD`、`MAKU_SHIM_A/B`、`MAKU_PHRASE`(数字はスケール度数。255 は休符)
 - 音色: `maku_setup` の表(エンジンとプリセット番号)と REL(リリース。長くするとボイスが足りなくなるので `tests/maku_test.c` の VOICES で確認)
 - ダッキングの深さ: `maku_step` のキック部分の `1800u`

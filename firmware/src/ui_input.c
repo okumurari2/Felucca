@@ -497,14 +497,8 @@ static void grid_keys(uint32_t pressed)
         uint32_t p = key_place(k);
         if (!((pressed >> k) & 1u))
             continue;
-        if (mk && key_black(k)) {                       /* black keys 1..8: what the pattern becomes (maku_kick_op) */
-            if (p < KO_N && !chain_busy()) {
-                uint32_t m = maku_kick_op(maku_kick_mask(), p, rng()), i;
-                for (i = 0; i < 16u; i++)
-                    grid_hit(TSEL, i, 0, (m >> i) & 1u);
-            }
+        if (mk && key_black(k))                         /* black keys 1..8 are noise pads (seq.c plays them); ACC is read in place */
             continue;
-        }
         if (!key_black(k)) {
             uint32_t i = ui.bank * 16u + p;
             if (chain_busy()) { ui_message("STOP TO EDIT"); continue; }
