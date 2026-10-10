@@ -6,7 +6,7 @@
  *   bottom left   PRESETS' macro
  *   bottom right  ALGORITHM's macro
  * GLO held (SELECT is the tempo): the top right shows BPM instead. One style for every mode. The scope is drawn each
- * frame, the other three only when something they show changes (or ui.force). */
+ * frame, the other three only when something they show changes (or ui.force); a forced redraw overpaints, never clears. */
 static int maku_knobs_on(void);
 #define MKQ 119
 static const char *const MAKU_TRK_NAME[4] = {"PULSE", "FLOOR", "HAZE", "VOICE"};
@@ -97,8 +97,6 @@ static void maku_draw(void)
         maku_kick_ghosts() * 7u;
     for (j = 0; j < 4u; j++)
         s = s * 31u + (uint32_t)trk[j].p[P_LEVEL];
-    if (ui.force)
-        lcd_fill(0, 0, 240, 240, T_BG);
     mq_top_left();
     if (ui.force || s != sig) {
         sig = s;

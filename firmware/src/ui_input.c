@@ -1072,7 +1072,6 @@ static void maku_knobs(uint32_t glo)
         trk[k].p[P_LEVEL] = (int16_t)clamp(trk[k].p[P_LEVEL] + accel(EN_K1 + k, s, 127), 0, 127);
         ui.hot_col = (uint8_t)k;
         ui.hot_t = 40;
-        ui.force = 1;
     }
     for (j = 0; j < 3u; j++) {
         uint32_t f = song.sel < 4u ? song.sel : 0u, e = j == 0u ? EN_SELECT : j == 1u ? EN_PRESET : EN_ALGO;
@@ -1085,7 +1084,6 @@ static void maku_knobs(uint32_t glo)
             maku_macro_set(f, j, (uint32_t)clamp((int32_t)maku.m[f][j] + accel(e, s, 127), 0, 127));
             fmt_int(b, maku.m[f][j]);
             ui_say(MAKU_MAC[f][j].name, b);
-            ui.force = 1;
         }
     }
 }
