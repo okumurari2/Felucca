@@ -11,6 +11,15 @@ static int maku_knobs_on(void);
 #define MKQ 119
 static const char *const MAKU_TRK_NAME[4] = {"PULSE", "FLOOR", "HAZE", "VOICE"};
 static const char *const MAKU_ROLE[3] = {"SELECT", "PRESETS", "ALGORITHM"};
+static const char MAKU_NUM[4][2] = {"1", "2", "3", "4"};
+
+/* each channel's colour (MONO / GREY: the theme's), shown wherever that channel is: its volume bar, its number, the
+ * waveform and the macros while it is focused */
+static uint16_t mk_col(uint32_t i)
+{
+    static const uint16_t C[4] = {RGB(255, 112, 88), RGB(255, 190, 56), RGB(72, 214, 130), RGB(92, 168, 255)};
+    return ux.mono ? T_THEME : C[i & 3u];
+}
 
 static void mq_gauge(int32_t x, int32_t y, int32_t w, int32_t v, uint16_t c)
 {
@@ -24,8 +33,11 @@ static void mq_macro(uint32_t j, uint32_t f, uint32_t tempo)
     char b[8];
     const char *name = tempo ? "BPM" : MAKU_MAC[f][j].name;
     int32_t v = tempo ? song.g[G_BPM] : maku.m[f][j];
-    uint16_t c = ui.hot_t && ui.hot_col == j ? T_ACCENT : T_THEME;
+    uint16_t cc = mk_col(f), c = ui.hot_t && ui.hot_col == j ? T_ACCENT : cc;
+    char tag[4] = {'C', 'H', 0, 0};
     cv_text(8, 6, &AF_S, MAKU_ROLE[j], T_DIM);
+    tag[2] = MAKU_NUM[f & 3u][0];
+    cv_text(MKQ - 6 - text_w(&AF_S, tag), 6, &AF_S, tag, cc);
     cv_text(8, 24, &AF_M, name, T_MID);
     fmt_int(b, v);
     cv_text_in(0, 48, MKQ, &AF_L, b, c, T_BG);
@@ -34,7 +46,7 @@ static void mq_macro(uint32_t j, uint32_t f, uint32_t tempo)
         uint32_t m = maku_kick_mask(), g = maku_kick_ghosts(), i, ph = song.playing ? trk[MAKU_KICK].seq_idx % 16u : 0xFFu;
         for (i = 0; i < 16u; i++) {
             int32_t x = 5 + (int32_t)i * 7;
-            uint16_t col = (m >> i) & 1u ? T_THEME : (g >> i) & 1u ? T_MID : T_LINE;
+            uint16_t col = (m >> i) & 1u ? cc : (g >> i) & 1u ? T_MID : T_LINE;
             cv_rect(x, 104, 5, i == ph ? 12 : 8, i == ph ? T_ACCENT : col);
         }
     }
@@ -65,7 +77,7 @@ static void mq_top_left(void)
     for (x = 0; x < MKQ; x++) {
         int32_t y = cy - snap[trig + (uint32_t)x] * a / peak;
         if (x)
-            cv_line_t(x - 1, py, x, y, T_THEME, 2);
+            cv_line_t(x - 1, py, x, y, mk_col(f), 2);
         py = y;
     }
     fmt_int(b, song.g[G_BPM]);
@@ -74,15 +86,16 @@ static void mq_top_left(void)
         cv_text(MKQ - 6 - bw, 48, &AF_M, b, ui.bpm_t ? T_ACCENT : T_TEXT);
         cv_text(MKQ - 6 - bw - 4 - text_w(&AF_S, "BPM"), 52, &AF_S, "BPM", T_DIM);
     }
-    for (i = 0; i < 4u; i++) {                          /* the four volumes, thin bars */
-        int32_t bx = 12 + (int32_t)i * 26, h = trk[i].p[P_LEVEL] * 36 / 127;
-        uint16_t c = i == f ? (ui.hot_t && ui.hot_col == i ? T_ACCENT : T_THEME) : T_MID;
-        cv_rect(bx, 76, 6, 36, T_LINE);
-        cv_rect(bx, 76 + 36 - h, 6, h, c);
+    for (i = 0; i < 4u; i++) {                          /* the four volumes: wide bars, numbered, each its colour */
+        int32_t bx = 4 + (int32_t)i * 29, bh = 38, h = trk[i].p[P_LEVEL] * bh / 127;
+        uint16_t cc = mk_col(i), c = i == f ? (ui.hot_t && ui.hot_col == i ? T_ACCENT : cc) : ux_mix(cc, T_BG, 55);
+        cv_rect(bx, 64, 25, bh, T_LINE);
+        cv_rect(bx, 64 + bh - h, 25, h, c);
+        cv_text(bx + (25 - text_w(&AF_S, MAKU_NUM[i])) / 2, 104, &AF_S, MAKU_NUM[i], i == f ? cc : T_MID);
         if (i == f)
-            cv_rect(bx - 1, 114, 8, 2, c);
+            cv_rect(bx, 116, 25, 2, cc);
     }
-    cv_text(6, 52, &AF_S, ui.msg_t ? ui.msg : MAKU_TRK_NAME[f], ui.msg_t ? T_ACCENT : T_MID);
+    cv_text(6, 52, &AF_S, ui.msg_t ? ui.msg : MAKU_TRK_NAME[f], ui.msg_t ? T_ACCENT : mk_col(f));
     cv_blit(0, 0);
 }
 
