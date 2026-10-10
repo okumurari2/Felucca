@@ -571,13 +571,15 @@ static void maku_set_density(uint32_t d)
     maku_apply();
 }
 
-/* the kick follows the root: TUNE moves it +-12 semitones (E1 64 = as designed), folded to -6..+5 */
+/* the kick follows the root: TUNE moves it +-12 semitones (E1 64 = as designed), folded to -6..+5, and sits MAKU_KICK_LOW
+ * (2 semitones) under it: a lower, rounder kick */
+#define MAKU_KICK_LOW 11
 static void maku_follow(void)
 {
     int32_t s = trk[MAKU_DRA].p[P_ROOT];
     uint32_t i;
     s = s >= 6 ? s - 12 : s;
-    trk[MAKU_KICK].p[P_E1] = (int16_t)(64 + (s * 32 + (s < 0 ? -3 : 3)) / 6);
+    trk[MAKU_KICK].p[P_E1] = (int16_t)(64 - MAKU_KICK_LOW + (s * 32 + (s < 0 ? -3 : 3)) / 6);
     for (i = 0; i < NTRK; i++) {
         trk[i].p[P_ROOT] = trk[MAKU_DRA].p[P_ROOT];
         trk[i].p[P_SCALE] = trk[MAKU_DRA].p[P_SCALE];
