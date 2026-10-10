@@ -1195,6 +1195,7 @@ static void maku_setup(void)
     memset(maku.pk_w, 0, sizeof maku.pk_w);
     maku.pk_av = 0;
     maku.dens = 0;
+    maku.stay_a = maku.stay_b = 0;
     maku.run_left = 0;
     maku.frame_on = 0;
     song.octave = 0;                                  /* (OCT- / OCT+ are the circle of fifths here, not the keys' range) */

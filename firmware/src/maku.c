@@ -54,6 +54,7 @@ static struct {
     uint8_t ovlive;              /* .. they are on, or have a value left to put back */
     uint8_t pk[MAKU_PK], pk_w[MAKU_PK], pk_av;  /* the notes played, always melting into the arp phrase: pk_w the strength of each
                                   * (255 new, 0 gone; it fades), bit i of pk_av: pk[i] is outside the scale */
+    uint8_t stay_a, stay_b;      /* a held drone / haze: the chord (note) coming next is not struck, the last one rings through (OPEN / GRAIN) */
     uint8_t open;                /* DRONE: OPEN 0..127: how many voices of the chord and how wide */
     uint8_t loose;               /* ARP: LOOSE 0..127: how much the phrase unravels and climbs */
     uint8_t m[4][3];             /* the macro of each track's SELECT / PRESETS / ALGORITHM, 0..127 */
@@ -90,9 +91,9 @@ static uint32_t maku_is_tie(uint32_t i, uint32_t idx)
     switch (i) {
     case MAKU_DRA:
         idx %= 19u;
-        return idx != 0 && idx != 18u;                  /* the chord holds to step 17; step 18 lets go before the next one */
+        return (idx != 0 && idx != 18u) || maku.stay_a; /* the chord holds to step 17; step 18 lets go before the next one (unless it stays) */
     case MAKU_DRB:
-        return (idx > 0 && idx < MAKU_SHIM_HOLD_A) || (idx > 7u && idx < 12u);
+        return (idx > 0 && idx < MAKU_SHIM_HOLD_A) || (idx > 7u && idx < 12u) || (maku.stay_b && (idx == 12u || idx == 0));
     case MAKU_ARP:
         return idx < MAKU_ARP_GAP && idx % MAKU_SLOW;
     }
@@ -348,6 +349,14 @@ static void maku_pick(uint32_t note)
     maku.pk_av = (uint8_t)((maku.pk_av & ~(1u << w)) | ((((m >> ((note + 120u - (uint32_t)trk[MAKU_ARP].p[P_ROOT]) % 12u)) & 1u) ? 0u : 1u) << w));
 }
 
+/* the SELECT macro of the drones and the arp also stretches their time: above the middle the more of their steps are left
+ * out (the kick's DENSITY the other way round), up to `max` percent. Rolled where the part would sound a new note */
+static uint32_t maku_spare(uint32_t i, uint32_t max)
+{
+    uint32_t m = maku.m[i][0];
+    return m > 64u && (uint32_t)(rng() % 100u) < (m - 64u) * max / 63u;     /* (the middle and below: as before) */
+}
+
 /* ARP, one step of the phrase table as it runs. CASCADE (casc) plays every step and ignores the breath, SCRAMBLE (scr) jumps
  * about the table and re-rolls more of it */
 static uint32_t maku_arp_step(const track_t *t, uint32_t idx, uint32_t d, step_t *out)
@@ -359,6 +368,8 @@ static uint32_t maku_arp_step(const track_t *t, uint32_t idx, uint32_t d, step_t
         return 0;
     }
     if (casc ? (uint32_t)(rng() % 127u) >= maku.vp[VB_CASC][0] : (d < 16u || (uint32_t)(rng() % 100u) >= 15u + (d - 16u) * 85u / 95u))
+        return 0;
+    if (!casc && maku_spare(MAKU_ARP, 65u))         /* LOOSE: a longer, emptier phrase */
         return 0;
     if (scr && (uint32_t)(rng() % 127u) < scr)      /* SCRAMBLE: a jump now and then, to wherever */
         maku.run_left = 0;
@@ -463,9 +474,15 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
 {
     const track_t *t = &trk[i];
     uint32_t d = maku_eff(), vel;
+    uint32_t tie;
     memset(out, 0, sizeof *out);
     out->time = ST_NOTE;
-    if (maku_is_tie(i, idx)) {                      /* a held part: this step only extends the note */
+    tie = maku_is_tie(i, idx);
+    if (i == MAKU_DRA && idx % 19u == 0)                /* OPEN, GRAIN: the next chord / note is left out now and then (a held part rings on) */
+        maku.stay_a = (uint8_t)(maku_held(i) && maku_spare(i, 70u));
+    if (i == MAKU_DRB && idx == 7u)
+        maku.stay_b = (uint8_t)(maku_held(i) && maku_spare(i, 70u));
+    if (tie) {                      /* a held part: this step only extends the note */
         out->time = ST_TIE;
         return 1;
     }
@@ -511,6 +528,8 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         }
         if (idx == 0)
             maku.cyc_a++;
+        if (!maku_held(i) && maku_spare(i, 55u))        /* OPEN: a struck chord left out (a held one: stay_a) */
+            return 0;
         {
             const uint8_t *c = MAKU_CHORD[(idx / 19u + 3u * maku.cyc_a) % 6u];   /* (3 a cycle: six chords in two cycles) */
             uint32_t k, nv = 2u + maku.open / 43u;       /* OPEN: 2 voices .. root, 5th, octave and the 9th above */
@@ -537,6 +556,8 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         }
         if (idx == 0)
             maku.cyc_b++;
+        if (!maku_held(i) && maku_spare(i, 60u))        /* GRAIN: fewer notes of the haze */
+            return 0;
         if (idx == 0) {
             out->note[0] = (uint8_t)maku_note(t, MAKU_SHIM_A[maku.cyc_b % 6u], maku_low(36u));
             out->n = 1;

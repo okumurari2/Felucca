@@ -123,9 +123,9 @@ SWELL（ENV）は ATTACK / RELEASE / REV、WOBBLE（LFO）は RATE（フィル�
 | トラック | SELECT | PRESETS（音色） | ALGORITHM |
 |---|---|---|---|
 | 1 脈 | DENS（密度） | TONE：TONE↑、SNAP↑、DECY↓ | WASH：リバーブ送り、ディレイ送り、DRV |
-| 2 床 | OPEN：和音の声数（2〜4） | TONE：BRIT、BUZZ | SWAY：コーラス、フィルターLFO、リリース |
-| 3 霞 | GRAIN：DENS↑、SIZE↓ | TONE：TONE、SPRD、RAND | AIR：リバーブ、ディレイ、アタック |
-| 4 声 | LOOSE：ほどけ（再抽選）と昇り（1オクターブ上） | TONE：BRIT、DAMP↓、ACC | TRAIL：ディレイ、リバーブ、リリース |
+| 2 床 | OPEN：和音の声数（2〜4）。中央（64）より上は間延び：次の和音を打たず前の和音を鳴らし続ける（最大70%） | TONE：BRIT、BUZZ | SWAY：コーラス、フィルターLFO、リリース |
+| 3 霞 | GRAIN：DENS↑、SIZE↓。中央より上は間延び：音を間引く／前の音を伸ばす（最大70%） | TONE：TONE、SPRD、RAND | AIR：リバーブ、ディレイ、アタック |
+| 4 声 | LOOSE：ほどけ（再抽選）と昇り（1オクターブ上）。中央より上は間延び：音を間引く（最大65%） | TONE：BRIT、DAMP↓、ACC | TRAIL：ディレイ、リバーブ、リリース |
 
 - 起動時と HOME 長押しで、床・霞・声の音色（プリセット）と、全マクロの値がランダムに決まる。
 - SEQ を押している間、密度に最大 +80 が約5秒かけて足される（ライザー）。離すと約0.25秒で落ちる。
