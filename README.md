@@ -4,211 +4,36 @@
 
 **MAKU (幕間機)** is an always-on ambience machine for the M-VAVE FM-1: power it on and a new, random, in-key
 world is already playing. Four parts (a pulse, a floor, a haze, a voice), four volume knobs, three macros per part,
-and buttons that are verbs (freeze, tape stop, sweep, repeat, break, riser...). Nothing is saved: every boot is a
+and buttons that are verbs (dive, fog, wobble, swell, keep, scramble, cascade, twist). Nothing is saved: every boot is a
 new world, and HOME held makes another.
 
-MAKU is built on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only;
-the rest of this README is Felucca's, kept until the parts MAKU drops are removed. Installing is at your own risk:
-M-VAVE's updater or the installer's **Return to official V15** takes you back.
+MAKU is built on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton Instruments), GPL-3.0-only.
+The sequencer editing, presets and projects, engine pages, web editor and the other Felucca features are removed (see
+[docs/AMBIENT.md](docs/AMBIENT.md), "捨てるもの"). Installing is at your own risk: M-VAVE's updater or the installer's
+**Return to official V15** takes you back. Not yet verified on hardware.
 
-- Spec: [docs/AMBIENT.md](docs/AMBIENT.md) (Japanese). The design notes of the generator under it: [docs/MAKU.md](docs/MAKU.md)
-- Build: [BUILDING.md](BUILDING.md)
+## Docs
 
-<a href="https://hugelton.itch.io/felucca"><img src="https://static.itch.io/images/badge-color.svg" alt="Available on itch.io" width="74"></a>
+- [docs/SPEC.md](docs/SPEC.md): the spec digest and a map of the docs
+- [docs/AMBIENT.md](docs/AMBIENT.md): the spec (Japanese)
+- [docs/MAKU.md](docs/MAKU.md): design notes of the generator under it (Japanese)
+- [docs/VOICES_RATING.md](docs/VOICES_RATING.md): the voice catalog and how it is rated (Japanese)
+- [docs/decisions.md](docs/decisions.md): one line per decision, newest last
+- [BUILDING.md](BUILDING.md): build
 
-## Features
+## What it does
 
-- **Thirteen engines** (below), each with its own factory presets
-- **Four tracks**, one synth part each with its own engine and sound (drums are the DRUM engine);
-  8 voices shared between them. ALGORITHM selects the track on every page
-- **Sequencer:** 64 steps per track with chords, ties, accent, slide, per-step chance and ratchets
-  (a step played 2, 3 or 4 times in its length); a piano roll of the steps; a drum grid (white keys =
-  steps, black keys = lanes); automation (formerly motion):
-  recording of knob moves per step (an automation icon marks the cards it drives); live loop recording
-  with overdub; step recording at the cursor (REC on SEQ > STEP while stopped: each key writes the step
-  under the cursor and moves on; without REC the keys only play); divisions listed by length, 4 bars
-  to 1/32; loading a sound never touches your patterns
-- **Parameter locks:** hold a step on SEQ > STEP (or the drum grid) and turn a knob to set that
-  parameter for that step only; EDIT with the step held clears its locks. **SEQ > AUTO LIST** lists the
-  track's locks and automation, step by step, to change their step, parameter or value, turn a lock into
-  automation or back, add or delete one. SAVE held undoes lock edits. Loading another sound keeps the locks
-  that still mean the same (all of them for the same engine)
-- **SEQ TOOLS:** hold SEQ on STEP, PATTERN, CHANCE or AUTOMATION for tools on the keys: CLEAR, REVERSE,
-  SHIFT < / >, **RANDOM** (a new beat, or new notes in the scale on the same rhythm) and **COOK** (changes
-  the pattern a little each press); on a DRUM track also BEAT and each lane's CLEAR, REVERSE, FILL and
-  RANDOM. Each tool is one undo (SAVE held); OCT− puts the track back as the layer found it
-- **Metronome and count-in:** CLICK (OFF, while recording, or always) with three levels, and a count-in
-  of 1 or 2 bars before recording from stop; the click goes to the headphones and speaker only, never to
-  USB audio or into a pattern
-- **Songs:** chain patterns A–D
-- **Chord keys:** one finger plays an in-key chord (triads or sevenths of the scale, or fixed chord
-  shapes), with voicings; on the keys, MIDI in, recording and the arpeggiator
-- **Arpeggiator** with UP, DN, UPDN, RND, ORD, REPEAT and, for chords, DNUP, UP+8, CONV, DIVG,
-  PINKY, THUMB, WALK and CHORD; a beat LED; 16 scales with a white-key mode, glide,
-  MONO / LEGATO / UNISON
-- **Modulation matrix:** 4 slots per track, MIDI controllers as sources
-- **Effects:** distortion and the SLICER per track; chorus, delay and reverb sends (the reverb as
-  ROOM or SPRING); master limiter
-- **FX layer:** hold FX for repeat, reverse, filter sweeps, tape stop, freeze and a harmonizer
-  (OCT UP / OCT DN with shimmer), and mutes on the black keys; MENU > FX LATCH makes them toggle, so
-  nothing has to stay held
-- **Quick layers:** hold FX, GLO, SCL or EDIT for shortcuts on the keys and knobs, or double-tap it to
-  keep the layer open; hold REC for the REC layer (CLEAR the track's sequence, CLICK, COUNT-IN, CLICK
-  LEVEL) and SEQ on the SEQ pages for SEQ TOOLS; one-step undo (SAVE held); REC on every page; OCT+
-  confirms, OCT- goes back; what can be pressed breathes softly instead of blinking
-- **Presets:** factory presets, 32 user preset slots and 4 projects, named on the device (an FM6
-  sound keeps its own patch in both); projects from every earlier version load. The PRESETS knob
-  changes the sound from every page that is not a list, and moves the step cursor on the SEQ pages.
-  Turn the FM-1 off and on and the music is as you left it (MENU > RESTORE LAST, an autosave of its own,
-  written only when stopped and idle)
-- **Screen:** flat UI with Inter Tight and Fukiai icons, FLAT or LINE style, 10 palettes including
-  grayscale, black and white, high contrast and NIGHT; tracks numbered 1–4 on small cushions;
-  MENU > LARGE for tall knob cards with larger labels and values; the menu in four tabs. The header
-  shows the track, the play state and the tempo in three parts; a new start-up screen; the screen can
-  go dark when the panel is left alone (MENU > SCREEN OFF)
-- **LEDs:** idle buttons and keys glow dim so the panel can be found in the dark (MENU > LEDS: OFF,
-  DIM LO, DIM HI or INV, the official firmware's look); PLAY turns green while playing; the keys show
-  the notes the sequencer and MIDI IN play, and on SEQ > STEP (stopped) the notes of the step under the cursor;
-  the drum grid marks the beats (steps 1, 5, 9, 13); MENU > SCALE LEDS shows the track's scale on the keys;
-  a soft light sweeps over the keys at power-on
-- **USB:** class-compliant MIDI in and out, and a stereo audio input ("Felucca") at 44.1 or 48 kHz
-  (the computer picks) that records the master output on the computer, no driver needed (at a fixed level with MENU > USB LEVEL FIXED;
-  on macOS 13–15, set MENU > USB SERIAL to OFF so the audio input appears)
-- **MIDI:** USB and TRS MIDI in; with ROUT CH1-4, channels 1–4 play tracks 1–4 and 5–16 are ignored
-  (ROUT SEL: every channel plays the selected track), and the keys send on the track's channel; pitch
-  bend, sustain, panic; clock from internal, USB or TRS. MIDI CCs set track parameters: 5 GLIDE, 7 LEVEL,
-  10 PAN, 71 resonance, 72 / 73 / 75 release / attack / decay, 74 brightness, 91 / 93 / 94 the reverb,
-  chorus and delay sends
-- **Web:** editor for every parameter (with a 6-operator FM patch editor), step grid, mixer,
-  preset library, sample upload and recording with trim, the MENU settings; full backup and restore;
-  return to the official firmware; Felucca itself running in the browser
-
-## Controls
-
-![FM-1 controls with Felucca](docs/controls.jpg)
-
-- Tap a page button for its page, again for the next; HOME returns home
-- Hold FX, GLO, SCL or EDIT for its quick layer; hold SAVE to undo, HOME for the menu, SEQ for the song
-  (on STEP, PATTERN, CHANCE and AUTOMATION, SEQ held opens SEQ TOOLS instead)
-- Hold REC on any page for the REC layer: F3 clears the track's sequence (SAVE held undoes it), G3 CLICK,
-  A3 COUNT-IN, B3 CLICK LEVEL. A tap of REC arms the track as before
-- Double-tap FX, GLO, SCL, EDIT, REC or SEQ (TOOLS) to keep its layer open without holding; tap it again to close
-- On SEQ > STEP, hold a step and turn KNOB 1–4 to lock those parameters on that step
-- On action pages and in dialogs, OCT+ does it and OCT− goes back; in the menu, OCT+ / OCT− change the value and HOME closes it
-- Save a sound: stop, tap SAVE, pick a slot with KNOB 1, then OCT+ and OCT+ again (name it with the keys)
-
-## Menu
-
-Hold **HOME** for the menu. Since 1.0.5 it is in four tabs: **DISPLAY** (COLOR to LEDS, SCREEN OFF),
-**CONTROL** (HOLD to BPM LOCK, SCALE LEDS), **AUDIO** (SPEAKER EQ, USB LEVEL, CLICK, CLICK LEVEL, COUNT-IN) and
-**SYSTEM** (USB SERIAL, RESTORE LAST, HARDWARE CALIBRATION, ABOUT).
-ALGORITHM moves between the tabs and PRESETS through the rows of one; any of KNOB 1–4, or OCT+ / OCT−,
-changes the value (OCT+ opens HARDWARE CALIBRATION and ABOUT); press HOME to close the menu. Every new
-setting defaults to the earlier behaviour. From 1.0.4 the web editor's Settings tab reads and changes them
-too (COLOR to USB SERIAL), saved the same way as from the menu; with 1.0.5 it groups them in the same tabs.
-
-- **COLOR:** the palette. GREY (grayscale, called MONO up to 1.0.1), GREEN, AMBER, ICE, VIOLET, ROSE,
-  PAPER (light), HI-CON (high contrast), NIGHT (the 0.9 look: true black, green-tinted text) and MONO
-  (black and white)
-- **STYLE:** FLAT (filled cards) or LINE (areas divided by thin lines)
-- **LARGE:** OFF or ON: on HOME and the value pages the four knob cards grow tall, marked K1–K4, with
-  larger labels and values about twice the size; the graph below becomes a strip. Lists, the piano roll,
-  the drum grid and the quick layers keep their layout with larger labels
-- **ANIM:** ON or OFF; OFF shows every change at once, without rolling digits, a gliding piano roll or
-  the LED sweep at power-on
-- **LEDS:** OFF (no glow), DIM LO, DIM HI (default) or INV (the idle LEDs lit, the active ones dark).
-  What can be pressed breathes up to about 60 % of a lit LED, about 30 % with DIM LO
-- **SCREEN OFF:** NEVER (default since 1.1.5.1), 5 MIN, 15 MIN, 30 MIN or 60 MIN: after that long with no
-  button, key or knob touched, the screen goes dark; the sound, the sequencer, MIDI and USB go on. The
-  backlight stays on: on the FM-1 its line also enables the buttons and keys (1.1.5 turned it off, and then
-  nothing woke the FM-1 until it was switched off). The next button, key or knob only turns the screen back on
-- **HOLD:** how long FX, GLO, SCL or EDIT is held before its map shows
-- **KNOB ACCEL:** OFF (one step per click) or ON: a fast, steady turn of a wide value moves 2 to 4 steps
-  per click, up to 8 on values of more than 64 steps, the FX and GLO layers' knobs included; lists never
-  jump. ON or OFF, every click of a fast turn counts
-- **FX LATCH:** ON, FX + an effect key turns the effect on until pressed again, the knob macros stay
-  where you leave them, and FX + OCT− turns everything off
-- **BPM LOCK:** ON, SELECT no longer changes the tempo; hold GLO and turn SELECT, tap F4 in the GLO
-  layer or use GLO > GLOBAL instead
-- **SCALE LEDS:** OFF or ON: the keys show the selected track's scale all the time (the root a little
-  brighter); not on DRUM or SLICE tracks
-- **SPEAKER EQ:** FLAT, LOWCUT or BASS+, a tone setting for the built-in speaker (not a switch). It also
-  shapes the headphone out and USB audio, so keep it on FLAT when recording. The firmware cannot turn
-  the speaker off, but headphones in the jack do
-- **USB LEVEL:** MASTER (the MASTER knob sets the USB audio level too) or FIXED (USB always at full
-  level, MASTER sets only the speaker and headphones)
-- **CLICK:** OFF (default), REC (while a track is armed) or ON: a click on every beat while playing, the
-  bar's first beat higher. **CLICK LEVEL:** LOW, MID (default) or HIGH; MASTER sets it too
-- **COUNT-IN:** OFF (default), 1 BAR or 2 BARS: with a track armed, PLAY counts in first (clicking even with
-  CLICK OFF), and a note played in the last half beat lands on step 1. Not with an external clock
-- **USB SERIAL:** ON or OFF, applied when the menu closes (the FM-1 reconnects). OFF leaves out the
-  serial console, a developer tool, so the FM-1 is a plain audio + MIDI device; this lets macOS 13–15
-  see its USB audio input. MIDI, the editor and the installer work either way
-- **RESTORE LAST:** ON (default) or OFF. ON, the FM-1 starts with the music you left (the header says
-  RESTORED), kept in an autosave apart from the four projects; it is written when the music changed, the
-  transport is stopped and nothing has been touched for 10 s, at most once a minute. OFF starts with the
-  power-on sounds
-- **HARDWARE CALIBRATION** and **ABOUT**
-
-## Engines
-
-In the order the device lists them:
-
-- **ANALOG**: virtual analog; two oscillators, noise, drive, resonant low-pass filter
-- **FM6**: classic 6-operator FM (Dexed-based): 32 algorithms, a full patch per track edited in the
-  web editor (which imports .syx files), macros on the device, an algorithm chart on screen; SLOT
-  picks a factory patch (F1–F8) or the track's own (OWN)
-- **PHASE**: phase distortion (ported from CrispyZebra)
-- **LOFI**: chiptune; pulse, triangle, saw, noise and a 4-bit wave RAM, stepped envelope, sweep, arpeggio
-- **SAMPLE**: multisampled instruments and 3 user sample slots
-- **VOICE**: formant oscillator, sung vowels
-- **TRIO**: 3 oscillators with ring modulation and sync, multimode filter
-- **WHEEL**: tonewheel-style organ; drawbar registrations, percussion, key click, drive, rotary speaker
-- **GRAIN**: granular textures from the built-in samples or a user slot
-- **PHYS**: physical models: modal resonators, strings, struck membranes, sympathetic strings
-- **NOISE**: noise from analog to digital: colours, crackle, shift-register and metallic tones
-- **SLICE**: a drum break, a piano note (both built in) or your own sample cut into slices, one per key;
-  set the slices by hand on the SLICES page
-- **DRUM**: an 8-lane kit of Felucca's own drum voices on the General MIDI key map. KIT picks the
-  standard kit or one of five virtual-analog (VA) kits in the manner of
-  classic analog drum machines (the numbers are a hint), every lane its own voice: **80** (deep sine kick with a long decay, noisy snare,
-  six-square hats), **10** (swept kick, white-noise snare, long-tailed claps, a cymbal), **66** (soft
-  round kick, bright snare, noise hats, a conga), **55** (dropping kick, high metal hats, a metal bell)
-  and **77** (swelling kick, multi-burst claps, claves, a cymbal). All of them are synthesized by
-  Felucca, no samples. EDIT > LANES and LANES 2 set each lane's level
-
-The DIGITAL engine of 0.9 has been replaced by FM6: projects and presets with DIGITAL sounds load
-as FM6 sounds converted from them. The SAMPLE engine's PERC kit was removed in 1.0.2: sounds and
-projects that used it load as the DRUM engine's kit, on the same key map. FM6's patch bank (the B
-slots) was removed in 1.0.3: user presets keep their own FM6 patch, and presets that used a B slot get
-that patch on the first start of 1.0.3. SLICE gained a second built-in sound in 1.0.4, PIANO (the SAMPLE
-engine's middle C), next to BREAK. Since 1.0.4 a missing sample (an empty user slot, or a set missing
-from the build) plays a plain sine at the note's pitch on SAMPLE, GRAIN and SLICE, and the screen says
-NO SAMPLE once. DRUM's KIT variants HAND, CYM and H+CYM were retired in 1.0.5: sounds and projects that
-used them play the 66, 10 and 77 kits.
-
-**SLICER** (FX page, every track): a tempo-synced 16-step gate or stutter, with 16 patterns.
-
-## Scale keyboard
-
-On the **SCL** page, set **QNT** to WHITE to play the selected scale using only the
-white keys (SNAP keeps every key and rounds it down to the scale). C4 plays **ROOT**; consecutive white keys play consecutive scale notes
-above and below it. Black keys are silent, including during live recording and
-step entry. **TRN** transposes the resulting notes; the octave buttons shift them
-by full octaves. Set QNT to OFF for the normal chromatic keyboard. QNT SEQ snaps the keys like SNAP and
-also maps the sequenced notes onto the current ROOT / SCALE as they play (the steps are not changed; drum
-kits are never quantized).
-
-Available scales: chromatic (CHR), major (MAJ), natural minor (MIN), Dorian (DOR),
-Mixolydian (MIX), major pentatonic (PEN), minor pentatonic (MPEN), harmonic minor
-(HARM), Phrygian (PHRY), Lydian (LYD), Locrian (LOC), ascending melodic minor (MEL),
-minor blues (BLUES), whole tone (WHOLE), half-whole diminished (DIMHW), and
-whole-half diminished (DIMWH). Scales with other than seven notes continue across
-the white keys without repeating notes; their roots need not fall on every C key.
-Drum kits and incoming MIDI keep their own note mapping.
-
-Press **SCL** again for the **CHORD** page: CHRD picks the chord keys (OFF, the scale's triads or
-sevenths, or a fixed shape) and VOIC the voicing.
+- **Four parts**: 1 pulse (kick, DRUM), 2 floor (drone, PHYS), 3 haze (shimmer, GRAIN), 4 voice (arpeggiated phrase, PHYS);
+  a boot picks the sounds, root, scale, tempo (about 70-90 BPM) and every macro at random
+- **KNOB 1-4** set the volume of parts 1-4 and move the focus to that part; **SELECT / PRESETS / ALGORITHM** are the
+  focused part's three macros, each moving several parameters at once, and turning right always makes it livelier
+- **Keys** play the focused part's sound, unquantized; every played note also melts into the voice's phrase
+- **Buttons are verbs**, held: PLAY dives, FX fogs, LFO wobbles, ENV swells, SAVE keeps, SEQ scrambles, ARP cascades,
+  EDIT twists, GLO sets tempo / swing / duck, SCL sets root / scale / register, OCT- / OCT+ step the key around the
+  circle of fifths; while one is held the three knobs move its own three parameters
+- **Kick**: when the kick part has focus the keys become a 16-step sequencer
+- **HOME** held: a new random world. HOME + OCT-: the settings menu (colour, screen off, calibration)
+- **MIDI**: USB and TRS in, clock follow; CC20 is the kick density. USB also carries the stereo audio input
 
 ## Layout
 
@@ -252,7 +77,7 @@ For more details, see [On AI-Assisted Development and Responsibility](https://gi
 ## Credits
 
 - **[Hügelton Instruments](https://hugelton.com)** (Leo Kuroshita, [@kurogedelic](https://github.com/kurogedelic)):
-  Felucca itself; the PHASE engine's waveforms (a C port of the oscillator of
+  Felucca itself, which MAKU is built on; the PHASE engine's waveforms (a C port of the oscillator of
   [CrispyZebra](https://github.com/hugelton/CrispyZebra), GPL-3.0); the DRUM voices and kits; the Hügelton Sample
   Pack (the drum samples, GPL-3.0-only, not CC0); the [Fukiai](https://github.com/hugelton/Fukiai) icon
   font ([MIT](LICENSES/MIT-Fukiai.txt))
