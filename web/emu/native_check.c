@@ -30,10 +30,7 @@ int main(int argc, char **argv)
     web_boot();
     render(500);
     web_test_heavy();
-    web_buttons(1u << B_PLAY);
-    render(60);
-    web_buttons(0);
-    render(60);
+    render(120);                               /* (the sequencer already runs from power-on) */
     rec = 1;
     render(2000);
     fclose(out);

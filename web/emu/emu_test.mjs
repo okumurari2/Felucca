@@ -87,12 +87,7 @@ check(`a MIDI note in (USB-MIDI's queue) sounds (peak ${a.peak.toFixed(3)})`, a.
 const draws = a.ex.web_screen_draws();
 a.turn(EN.K1, 3);
 check("KNOB 1 redraws the screen", a.ex.web_screen_draws() > draws);
-a.tap(B.PLAY);
-a.render(1000);
-check("PLAY: the sequencer runs, PLAY's green LED", a.ex.web_playing() === 1 && (a.ex.web_lit_buttons() >> 14 & 1) === 1);
-a.tap(B.PLAY);
-a.render(300);
-check("PLAY again stops it", a.ex.web_playing() === 0);
+check("the sequencer runs from power-on (MAKU is always on), PLAY's green LED", a.ex.web_playing() === 1 && (a.ex.web_lit_buttons() >> 14 & 1) === 1);
 a.ex.web_buttons(1 << B.FX);                                  // #119: FX held, its map: the effects breathe
 a.render(800);
 const brK = a.ex.web_breath_keys(), brB = a.ex.web_breath_buttons(), litK = a.ex.web_lit_keys();
@@ -141,8 +136,7 @@ check("a fresh instance with the kept sectors has it; one without does not",
 async function song() {
   const d = await device(null);
   d.render(500);
-  d.ex.web_test_heavy();
-  d.tap(B.PLAY);
+  d.ex.web_test_heavy();                                      // (the sequencer already runs from power-on)
   d.rec = true;
   d.render(2000);
   return d;

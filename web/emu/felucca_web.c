@@ -259,6 +259,7 @@ static void web_power_on(void)
     boot_leds();                          /* main.c: the power-on LED sweep, from the scan's start */
     maku_setup();                         /* main.c: always on, a new random world every visit (AMBIENT.md) */
     maku_world(web_seed);
+    transport_req = 1;                    /* always on: the sequencer runs from power-on (PLAY is the BREAK verb now) */
     web_boot_ms = fm1_ms + 430u;         /* main.c: 30 + 400 ms before the first frame */
     web_booted = 1;
 }
