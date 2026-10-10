@@ -686,7 +686,7 @@ static void keyboard_block(void)
             if (song.grid == 2u)                  /* NAME (ui_name.c): every key types, none sounds */
                 kb_note[k] = KB_SILENT;
             else if (song.grid)                   /* the DRUM grid: a lane key plays its lane, the rest are the UI's */
-                kb_note[k] = key_black(k) && key_place(k) < NLANE ? DRUM_LANE_NOTE[key_place(k)] : KB_SILENT;
+                kb_note[k] = key_black(k) && key_place(k) < NLANE ? (maku.on && song.sel == MAKU_KICK ? MAKU_PAD[key_place(k)] : DRUM_LANE_NOTE[key_place(k)]) : KB_SILENT;
             else
                 kb_note[k] = (uint8_t)kb_map(&trk[kb_trk[k]], k);
             if (kb_note[k] == KB_SILENT)
