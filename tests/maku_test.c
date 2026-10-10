@@ -533,10 +533,10 @@ static int buttons(void)
     start(0);
     ui.home = 1; ui.menu = 0; ui.confirm = 0;
     down_for(B_FX, 3);
-    bad += check("BUTTONS: FX held: FOG, no layer opens, the master's low-pass closes", (maku.hv & VBIT(VB_FOG)) && maku.verb == VB_FOG && !ui.layer &&
-                 !(kb_mask & (1u << panel.btn[B_FX])) && perf_k[0] < 0);
+    bad += check("BUTTONS: FX held: DRIFT, no layer opens", (maku.hv & VBIT(VB_DRIFT)) && maku.verb == VB_DRIFT && !ui.layer &&
+                 !(kb_mask & (1u << panel.btn[B_FX])));
     turn(EN_SELECT, 5);
-    bad += check("  .. SELECT is its WASH (the macros stay)", maku.vp[VB_FOG][0] == 95 && maku.m[0][0] == 40u);
+    bad += check("  .. SELECT is its RATE (the macros stay)", maku.vp[VB_DRIFT][0] == 65 && maku.m[0][0] == 40u);
     let_go(B_FX);
     bad += check("  let go: it is off", !maku.hv && maku.verb == VB_NONE && perf_k[0] == 0);
     down_for(B_SAVE, 3);
@@ -776,7 +776,7 @@ static int verbs(void)
     return bad;
 }
 
-/* the five verbs that change the music while held (docs/AMBIENT.md): KEEP, SCRAMBLE, CASCADE, FOG, TWIST */
+/* the five verbs that change the music while held (docs/AMBIENT.md): KEEP, SCRAMBLE, CASCADE, DRIFT, TWIST */
 static int verbs2(void)
 {
     int bad = 0;
@@ -878,20 +878,45 @@ static int verbs2(void)
     bad += check("CASCADE held: the arp plays much more, in its breath too, and stacks octaves (SPAN)", nhits[3] > a0 * 3u / 2u && ok && a1 == 3u);
     maku.hv = 0;
 
-    /* FOG: the sends of everything but the kick rise */
+    /* DRIFT: the space it has added raises the sends of everything but the kick */
     start(0);
-    maku.va[VB_FOG] = 4096;
+    maku.drs = 127;
     c = d = r = 0;
     maku_boost(MAKU_DRB, &c, &d, &r);
-    bad += check("FOG: the haze's chorus, delay and reverb sends rise", c > 10000 && d > 10000 && r > 15000);
+    bad += check("DRIFT: the space it added: the haze's chorus, delay and reverb sends rise", c > 10000 && d > 10000 && r > 15000);
     c = d = r = 0;
     maku_boost(MAKU_KICK, &c, &d, &r);
     bad += check("  the kick's do not", !c && !d && !r);
-    maku.vp[VB_FOG][0] = 0;
+    maku.drs = 0;
     c = d = r = 0;
     maku_boost(MAKU_DRB, &c, &d, &r);
-    bad += check("  WASH 0: no reverb or delay", !d && !r && c > 0);
-    maku.va[VB_FOG] = 0;
+    bad += check("  none added: no sends", !c && !d && !r);
+    {                                                   /* held: the macros wander within RANGE of the press, and stay when let go */
+        uint32_t k, moved = 0, far = 0, held_m[12];
+        start(0);
+        maku.vp[VB_DRIFT][0] = 127; maku.vp[VB_DRIFT][1] = 40; maku.vp[VB_DRIFT][2] = 127;
+        for (k = 0; k < 12u; k++)
+            held_m[k] = maku.m[k / 3u][k % 3u];
+        song.g[G_CLOCK] = 0;
+        maku.hv = VBIT(VB_DRIFT);
+        for (k = 0; k < 20000u; k++)
+            maku_drift();
+        for (k = 0; k < 12u; k++) {
+            int32_t dm = (int32_t)maku.m[k / 3u][k % 3u] - (int32_t)held_m[k];
+            moved += dm != 0;
+            far += dm > 20 || dm < -20;
+        }
+        bad += check("DRIFT held: the macros wander, never further than RANGE / 2 from the press", moved > 6u && !far);
+        bad += check("  REACH 127: the space and the tempo wander too", maku.drs <= 20 && song.g[G_BPM] >= 40);
+        maku.hv = 0;
+        maku_drift();
+        k = maku.m[1][1];
+        for (moved = 0; moved < 5000u; moved++)
+            maku_drift();
+        bad += check("  let go: it stops where it is", !maku.dr_on && maku.m[1][1] == k);
+        maku.vp[VB_DRIFT][2] = 0;
+        maku.drs = 0;
+    }
     maku.va[VB_KEEP] = 4096;
     d = 0; c = r = 0;
     maku_boost(MAKU_ARP, &c, &d, &r);

@@ -73,7 +73,7 @@ static const struct { const char *title, *name[3]; } MAKU_VB[VB_N] = {
     {"KEEP", {"LEN", "HOLD", "ECHO"}},                  /* SAVE: the arp loops its last steps, the drones stay */
     {"SCRAMBLE", {"ARP", "KICK", "SWING"}},             /* SEQ */
     {"CASCADE", {"DENSE", "SPAN", "ECHO"}},             /* ARP */
-    {"FOG", {"WASH", "SPREAD", "DARK"}},                /* FX */
+    {"DRIFT", {"RATE", "RANGE", "REACH"}},            /* FX: the macros (and from REACH 43 the space, from 86 the tempo) wander while held */
     {"TWIST", {"DENS", "TONE", "WASH"}},                /* EDIT: every track's macros of that knob */
     {"SWELL", {"ATTACK", "RELEASE", "REV"}},            /* ENV: longer attacks and releases, a deeper reverse swell */
     {"WOBBLE", {"RATE", "DEPTH", "CHORUS"}},            /* LFO: the filter LFO faster and deeper, more chorus */

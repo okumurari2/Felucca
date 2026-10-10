@@ -31,7 +31,7 @@
 
 /* The verbs that hold three parameters of their own: while the button is held the screen shows them and SELECT / PRESETS /
  * ALGORITHM move them (a verb's values stay until the next world). HOME has none. */
-enum { VB_NONE, VB_PLAY, VB_GLO, VB_ROOT, VB_KEEP, VB_SCRAM, VB_CASC, VB_FOG, VB_TWIST, VB_SWELL, VB_WOB, VB_N };
+enum { VB_NONE, VB_PLAY, VB_GLO, VB_ROOT, VB_KEEP, VB_SCRAM, VB_CASC, VB_DRIFT, VB_TWIST, VB_SWELL, VB_WOB, VB_N };
 #define VBIT(v) (1u << (v))
 #define MAKU_NSCALE 8u
 static const uint8_t MAKU_SCALES[MAKU_NSCALE] = {1, 2, 9, 3, 4, 8, 5, 6};   /* MAJ MIN LYD DOR MIX PHRY PEN MPEN: major, minor, major, minor, ... */
@@ -52,6 +52,10 @@ static struct {
     uint8_t dvalid;              /* .. bit i: dc[i] holds one */
     struct { int16_t b, w; } ov[12];   /* SWELL and WOBBLE write track parameters: the base value, and what was written last (maku_over) */
     uint8_t ovlive;              /* .. they are on, or have a value left to put back */
+    uint8_t dr_on;               /* DRIFT is held and has taken its anchors */
+    uint16_t dr_t;               /* DRIFT's clock: a step of the walk every 512 */
+    uint8_t drs;                 /* the space DRIFT has added (0..127): the sends rise and the master's low-pass closes; it stays when let go */
+    int16_t dra[16];             /* DRIFT's anchors, taken at the press: the 12 macros, BPM, GLO's SWING and DUCK, drs */
     uint8_t pk[MAKU_PK], pk_w[MAKU_PK], pk_av;  /* the notes played, always melting into the arp phrase: pk_w the strength of each
                                   * (255 new, 0 gone; it fades), bit i of pk_av: pk[i] is outside the scale */
     uint8_t stay_a, stay_b;      /* a held drone / haze: the chord (note) coming next is not struck, the last one rings through (OPEN / GRAIN) */
@@ -63,7 +67,7 @@ static struct {
                                   * frame, with the new key signature, until it ends */
     uint8_t brk;                 /* PLAY is down: the BREAK */
     uint8_t vp[VB_N][3];         /* the verbs' parameters, 0..127 (PLAY: SINK WASH HUSH; GLO: - SWING DUCK; ROOT: - - REG 0..2;
-                                  * KEEP: LEN HOLD ECHO; SCRAMBLE: ARP KICK SWING; CASCADE: DENSE SPAN ECHO; FOG: WASH SPREAD DARK;
+                                  * KEEP: LEN HOLD ECHO; SCRAMBLE: ARP KICK SWING; CASCADE: DENSE SPAN ECHO; DRIFT: RATE RANGE REACH;
                                   * TWIST: DENS TONE WASH; SWELL: ATTACK RELEASE REV; WOBBLE: RATE DEPTH CHORUS) */
     int32_t dive;                /* the BREAK's dive, Q12: the rest sinks into reverb and reverse delay; it comes up slowly */
     int32_t kfade;               /* the kick's level after a BREAK, Q12: out fast, back in slowly */
@@ -644,6 +648,53 @@ static void maku_over(uint32_t slot, uint32_t t, uint32_t p, int32_t off)
     *v = maku.ov[slot].w = (int16_t)n;
 }
 
+/* DRIFT, once per block: while it is held the values it reaches wander, a step of the walk now and then, never further from where
+ * they were at the press than RANGE says, and stay where they land. REACH: the 12 macros; from 43 the space; from 86 the tempo,
+ * swing and duck too (the tempo only on its own clock) */
+static int32_t maku_walk(int32_t v, int32_t a, int32_t span, int32_t top)
+{
+    int32_t lo = a - span < 0 ? 0 : a - span, hi = a + span > top ? top : a + span;
+    v += (int32_t)(rng() % 3u) - 1;
+    return v < lo ? lo : v > hi ? hi : v;
+}
+static void maku_drift(void)
+{
+    uint32_t i;
+    int32_t span, reach = maku.vp[VB_DRIFT][2], v;
+    if (!((maku.hv >> VB_DRIFT) & 1u)) {
+        maku.dr_on = 0;
+        return;
+    }
+    if (!maku.dr_on) {
+        for (i = 0; i < 12u; i++)
+            maku.dra[i] = maku.m[i / 3u][i % 3u];
+        maku.dra[12] = song.g[G_BPM];
+        maku.dra[13] = maku.vp[VB_GLO][1];
+        maku.dra[14] = maku.vp[VB_GLO][2];
+        maku.dra[15] = maku.drs;
+        maku.dr_on = 1;
+        maku.dr_t = 0;
+    }
+    maku.dr_t = (uint16_t)(maku.dr_t + 1u + maku.vp[VB_DRIFT][0] / 8u);
+    if (maku.dr_t < 512u)
+        return;
+    maku.dr_t = (uint16_t)(maku.dr_t - 512u);
+    span = maku.vp[VB_DRIFT][1] / 2;
+    for (i = 0; i < 12u; i++) {
+        v = maku_walk(maku.m[i / 3u][i % 3u], maku.dra[i], span, 127);
+        if (v != maku.m[i / 3u][i % 3u])
+            maku_macro_set(i / 3u, i % 3u, (uint32_t)v);
+    }
+    if (reach >= 43)
+        maku.drs = (uint8_t)maku_walk(maku.drs, maku.dra[15], span, 127);
+    if (reach >= 86) {
+        if (!song.g[G_CLOCK])
+            song.g[G_BPM] = (int16_t)maku_walk(song.g[G_BPM], maku.dra[12], maku.vp[VB_DRIFT][1] * 16 / 127, 240);
+        maku.vp[VB_GLO][1] = (uint8_t)maku_walk(maku.vp[VB_GLO][1], maku.dra[13], span, 127);
+        maku.vp[VB_GLO][2] = (uint8_t)maku_walk(maku.vp[VB_GLO][2], maku.dra[14], span, 127);
+    }
+}
+
 /* once per block, before the tracks tick: a ROOT / SCALE edit on any track becomes everyone's */
 static __attribute__((noinline)) void maku_block(void)
 {
@@ -655,6 +706,7 @@ static __attribute__((noinline)) void maku_block(void)
         a = (maku.hv >> i) & 1u ? (a + 16 > 4096 ? 4096 : a + 16) : (a > 8 ? a - 8 : 0);
         maku.va[i] = (int16_t)a;
     }
+    maku_drift();
     if (maku.va[VB_TWIST] || maku.tw_q) {                          /* TWIST: every track's three macros move together */
         uint32_t j;
         maku.tw_q = maku.va[VB_TWIST];
@@ -723,17 +775,17 @@ static int32_t maku_swell_rvs(int32_t v)
 {
     return maku.on ? maku_up(v, 100, maku.va[VB_SWELL], maku.vp[VB_SWELL][2]) : v;
 }
-/* the sends of track i (fx.c mix_part, the scale of P_CHOR * 258 ..) with the held verbs on them: FOG washes everything but the
- * kick (WASH: reverb and delay, SPREAD: chorus); KEEP and CASCADE throw the arp into the delay (ECHO) */
+/* the sends of track i (fx.c mix_part, the scale of P_CHOR * 258 ..) with the held verbs on them: the space DRIFT has added
+ * washes everything but the kick; KEEP and CASCADE throw the arp into the delay (ECHO) */
 static void maku_boost(uint32_t i, int32_t *c, int32_t *d, int32_t *r)
 {
     int32_t f;
     if (!maku.on)
         return;
-    if (i != MAKU_KICK && (f = maku.va[VB_FOG]) != 0) {
-        *r = maku_up(*r, 127 * 258 * 9 / 10, f, maku.vp[VB_FOG][0]);
-        *d = maku_up(*d, 127 * 258 * 6 / 10, f, maku.vp[VB_FOG][0]);
-        *c = maku_up(*c, 127 * 258 * 8 / 10, f, maku.vp[VB_FOG][1]);
+    if (i != MAKU_KICK && maku.drs) {
+        *r = maku_up(*r, 127 * 258 * 9 / 10, 4096, maku.drs);
+        *d = maku_up(*d, 127 * 258 * 6 / 10, 4096, maku.drs);
+        *c = maku_up(*c, 127 * 258 * 8 / 10, 4096, maku.drs / 2);
     }
     if (i != MAKU_KICK && (f = maku.va[VB_WOB]) != 0)               /* WOBBLE: the chorus (CHORUS) */
         *c = maku_up(*c, 127 * 258 * 8 / 10, f, maku.vp[VB_WOB][2]);

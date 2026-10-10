@@ -1119,7 +1119,7 @@ static void maku_knobs(void)
     }
 }
 
-/* AMBIENT.md: the buttons are verbs, held ones: SAVE keeps (KEEP), SEQ scrambles (SCRAMBLE), ARP cascades (CASCADE), FX fogs (FOG),
+/* AMBIENT.md: the buttons are verbs, held ones: SAVE keeps (KEEP), SEQ scrambles (SCRAMBLE), ARP cascades (CASCADE), FX drifts (DRIFT),
  * EDIT twists (TWIST), ENV swells (SWELL), LFO wobbles (WOBBLE), PLAY sinks. Each has three parameters on the screen while it is held
  * (maku.vp). REC does nothing: the keys played melt into the arp phrase at all times. HOME held: a new world. GLO and SCL keep their
  * layers (tempo, root). Called once a pass */
@@ -1127,7 +1127,7 @@ static void maku_world_new(void);
 static void maku_buttons(uint32_t pressed, uint32_t notes)
 {
     static const struct { uint8_t b, v; } V[] = {
-        {B_SAVE, VB_KEEP}, {B_SEQ, VB_SCRAM}, {B_ARP, VB_CASC}, {B_FX, VB_FOG}, {B_EDIT, VB_TWIST}, {B_ENV, VB_SWELL}, {B_LFO, VB_WOB}, {B_PLAY, VB_PLAY},
+        {B_SAVE, VB_KEEP}, {B_SEQ, VB_SCRAM}, {B_ARP, VB_CASC}, {B_FX, VB_DRIFT}, {B_EDIT, VB_TWIST}, {B_ENV, VB_SWELL}, {B_LFO, VB_WOB}, {B_PLAY, VB_PLAY},
     };
     uint32_t i, k, nh = 0, fresh;
     for (i = 0; i < NELEM(V); i++)
@@ -1145,7 +1145,7 @@ static void maku_buttons(uint32_t pressed, uint32_t notes)
                 maku.verb = V[i].v;
     }
     maku.brk = (uint8_t)((nh >> VB_PLAY) & 1u);
-    perf_k[0] = (int8_t)((nh >> VB_FOG) & 1u ? -((int32_t)maku.vp[VB_FOG][2] * 70 / 127) : 0);   /* FOG: DARK closes the master's low-pass */
+    perf_k[0] = (int8_t)(-((int32_t)maku.drs * 40 / 127));  /* the space DRIFT added darkens the master's low-pass */
     for (k = 0; k < 27u; k++)                             /* the keys always melt into the field (not the kick's grid: its keys are steps) */
         if (((notes >> k) & 1u) && !maku_kick_grid())
             maku_pick(kb_map(TSEL, k));
