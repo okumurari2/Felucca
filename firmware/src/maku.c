@@ -238,9 +238,10 @@ static uint32_t maku_orn(uint32_t idx, uint32_t d, uint32_t *chance)
     return 1u << 3;
 }
 
-/* the kick's black keys: eight noise pads (GM notes, low to high: pedal hat, closed hat, tambourine-ish hat, open hat,
- * clap, snare, two cymbals) played on the kick's own DRUM track */
-static const uint8_t MAKU_PAD[8] = {44, 42, 54, 46, 39, 38, 55, 49};
+/* the kick's black keys: eight pads of hiss and grit (GM notes, dark to bright: ride 2's shimmer, long guiro's scrape,
+ * pedal hat's tick, cabasa, tambourine, maracas, open hat, splash), every one noise (hats and cymbals, no clap or
+ * snare body), played on the kick's own DRUM track. Short ones are the "chiri" grit, long ones the "saa" hiss */
+static const uint8_t MAKU_PAD[8] = {59, 74, 44, 69, 54, 70, 46, 55};
 
 
 /* the three parameters of each track (docs/AMBIENT.md): SELECT, PRESETS and ALGORITHM each own one macro, 0..127,

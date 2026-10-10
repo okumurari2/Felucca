@@ -438,9 +438,9 @@ static int kickgrid(void)
         uint32_t ok = 1, k;
         for (k = 0; k < 8u; k++) {
             uint32_t ty = (uint32_t)DRUM_GM[MAKU_PAD[k] - 35u][0];
-            ok &= ty == DVT_SNARE || ty == DVT_CLAP || ty == DVT_HATC || ty == DVT_HATO || ty == DVT_CYM;
+            ok &= ty == DVT_HATC || ty == DVT_HATO || ty == DVT_CYM;
         }
-        bad += check("PADS: the eight black keys are noise sounds (hats, clap, snare, cymbals), not kick or tones", ok);
+        bad += check("PADS: the eight black keys are hiss and grit (hats, cymbals), not kick, snare, clap or tones", ok);
     }
     song.sel = 1;
     bad += check("  another track selected: not the kick's grid", !maku_kick_grid());
