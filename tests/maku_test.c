@@ -532,9 +532,10 @@ static int buttons(void)
     bad += check("  EDIT: TWIST", maku.verb == VB_TWIST && !(perf_held & PF_BIT(PF_OUP)));
     let_go(B_EDIT);
     down_for(B_ENV, 3);
-    down_for(B_LFO, 3);
-    bad += check("  ENV and LFO have no verb", !maku.hv && !perf_held && !ui.layer && ui.home);
+    bad += check("  ENV: SWELL, no layer, no page, no old tape stop", maku.verb == VB_SWELL && !perf_held && !ui.layer && ui.home);
     let_go(B_ENV);
+    down_for(B_LFO, 3);
+    bad += check("  LFO: WOBBLE, no old filter sweep", maku.verb == VB_WOB && !perf_held && !ui.layer && ui.home);
     let_go(B_LFO);
     down_for(B_PLAY, 3);
     bad += check("  PLAY held: the BREAK, and the transport does not start", maku.brk && maku.verb == VB_PLAY && !transport_req);
@@ -858,6 +859,37 @@ static int verbs2(void)
     for (i = 0; i < 900u; i++)
         maku_block();
     bad += check("  let go: all back", trk[2].p[P_E7] == l0 && !maku.tw_q);
+    /* SWELL and WOBBLE: attack and release longer, the filter LFO faster and deeper, put back when let go; a macro written meanwhile is the new base */
+    start(0);
+    {
+        int16_t a0 = trk[2].p[P_ATK], r0 = trk[2].p[P_REL], lr = trk[1].p[P_LRATE], ld = trk[1].p[P_LD_FLT], k0 = trk[0].p[P_ATK];
+        maku.hv = VBIT(VB_SWELL) | VBIT(VB_WOB);
+        for (i = 0; i < 400u; i++)
+            maku_block();
+        bad += check("SWELL held: the attack and release of the three voices are longer (not the kick's)", trk[2].p[P_ATK] > a0 && trk[2].p[P_REL] > r0 && trk[1].p[P_ATK] > 10 && trk[0].p[P_ATK] == k0);
+        bad += check("WOBBLE held: the drone's filter LFO faster and deeper", trk[1].p[P_LRATE] > lr && trk[1].p[P_LD_FLT] > ld);
+        maku_macro_set(2, 2, 100);                      /* AIR moves the shimmer's attack while SWELL is on */
+        for (i = 0; i < 4u; i++)
+            maku_block();
+        maku.hv = 0;
+        for (i = 0; i < 900u; i++)
+            maku_block();
+        bad += check("  let go: all back where they were; AIR's new attack stays", trk[1].p[P_LRATE] == lr && trk[1].p[P_LD_FLT] == ld && trk[3].p[P_REL] > 0 &&
+                     trk[2].p[P_ATK] != a0 && trk[2].p[P_ATK] == 60 + ((127 - 60) * 100 + 63) / 127 && !maku.ovlive);
+        (void)r0;
+    }
+    maku.va[VB_SWELL] = 4096;
+    maku.vp[VB_SWELL][2] = 127;
+    bad += check("  REV: the reverse swell is full", maku_swell_rvs(0) == 100);
+    maku.va[VB_SWELL] = 0;
+    maku.va[VB_WOB] = 4096;
+    c = d = r = 0;
+    maku_boost(MAKU_DRA, &c, &d, &r);
+    bad += check("WOBBLE: CHORUS sends the voices into the chorus, not the kick", c > 10000 && !d && !r);
+    c = 0;
+    maku_boost(MAKU_KICK, &c, &d, &r);
+    bad += check("  the kick's chorus stays", c == 0);
+    maku.va[VB_WOB] = 0;
     return bad;
 }
 

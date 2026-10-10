@@ -75,6 +75,8 @@ static const struct { const char *title, *name[3]; } MAKU_VB[VB_N] = {
     {"CASCADE", {"DENSE", "SPAN", "ECHO"}},             /* ARP */
     {"FOG", {"WASH", "SPREAD", "DARK"}},                /* FX */
     {"TWIST", {"DENS", "TONE", "WASH"}},                /* EDIT: every track's macros of that knob */
+    {"SWELL", {"ATTACK", "RELEASE", "REV"}},            /* ENV: longer attacks and releases, a deeper reverse swell */
+    {"WOBBLE", {"RATE", "DEPTH", "CHORUS"}},            /* LFO: the filter LFO faster and deeper, more chorus */
 };
 static const char *const MAKU_REG[3] = {"LOW", "MID", "HIGH"};
 

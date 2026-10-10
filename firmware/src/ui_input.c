@@ -1126,13 +1126,13 @@ static void maku_knobs(void)
 }
 
 /* AMBIENT.md: the buttons are verbs, held ones: SAVE keeps (KEEP), SEQ scrambles (SCRAMBLE), ARP cascades (CASCADE), FX fogs (FOG),
- * EDIT twists (TWIST), PLAY sinks. Each has three parameters on the screen while it is held (maku.vp). Toggle: REC. HOME held:
- * a new world. GLO and SCL keep their layers (tempo, root). ENV and LFO have no verb. Called once a pass */
+ * EDIT twists (TWIST), ENV swells (SWELL), LFO wobbles (WOBBLE), PLAY sinks. Each has three parameters on the screen while it is held (maku.vp). Toggle: REC. HOME held:
+ * a new world. GLO and SCL keep their layers (tempo, root). Called once a pass */
 static void maku_world_new(void);
 static void maku_buttons(uint32_t pressed, uint32_t notes)
 {
     static const struct { uint8_t b, v; } V[] = {
-        {B_SAVE, VB_KEEP}, {B_SEQ, VB_SCRAM}, {B_ARP, VB_CASC}, {B_FX, VB_FOG}, {B_EDIT, VB_TWIST}, {B_PLAY, VB_PLAY},
+        {B_SAVE, VB_KEEP}, {B_SEQ, VB_SCRAM}, {B_ARP, VB_CASC}, {B_FX, VB_FOG}, {B_EDIT, VB_TWIST}, {B_ENV, VB_SWELL}, {B_LFO, VB_WOB}, {B_PLAY, VB_PLAY},
     };
     uint32_t i, k, nh = 0, fresh;
     for (i = 0; i < NELEM(V); i++)

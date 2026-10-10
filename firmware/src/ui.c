@@ -1165,8 +1165,8 @@ static void maku_setup(void)
     maku.vp[VB_PLAY][1] = maku.vp[VB_PLAY][2] = 127;
     maku.vp[VB_GLO][2] = 64;
     maku.vp[VB_ROOT][2] = 1;
-    {                                                  /* KEEP LEN HOLD ECHO; SCRAMBLE ARP KICK SWING; CASCADE DENSE SPAN ECHO; FOG WASH SPREAD DARK; TWIST DENS TONE WASH */
-        static const uint8_t D[5][3] = {{40, 127, 60}, {80, 60, 50}, {110, 60, 70}, {90, 70, 50}, {40, 60, 50}};
+    {                                                  /* KEEP LEN HOLD ECHO; SCRAMBLE ARP KICK SWING; CASCADE DENSE SPAN ECHO; FOG WASH SPREAD DARK; TWIST DENS TONE WASH; SWELL ATTACK RELEASE REV; WOBBLE RATE DEPTH CHORUS */
+        static const uint8_t D[7][3] = {{40, 127, 60}, {80, 60, 50}, {110, 60, 70}, {90, 70, 50}, {40, 60, 50}, {80, 90, 40}, {70, 80, 70}};
         memcpy(&maku.vp[VB_KEEP][0], D, sizeof D);
     }
     for (i = 0; i < NTRK; i++)
@@ -1183,6 +1183,8 @@ static void maku_setup(void)
     maku.hv = maku.verb = maku.brk = 0;                /* (the verbs held, KEEP's loop and the drones it replays) */
     memset(maku.va, 0, sizeof maku.va);
     maku.tw_q = 0;
+    memset(maku.ov, 0, sizeof maku.ov);
+    maku.ovlive = 0;
     maku.kw = maku.kcount = maku.kn = maku.kp = maku.kact = maku.dvalid = 0;
     memset(maku.kr, 0, sizeof maku.kr);
     maku.pk_n = maku.pk_av = 0;
