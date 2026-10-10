@@ -42,6 +42,9 @@ static struct {
     uint8_t loose;               /* ARP: LOOSE 0..127: how much the phrase unravels and climbs */
     uint8_t m[4][3];             /* the macro of each track's SELECT / PRESETS / ALGORITHM, 0..127 */
     uint8_t root, scale;         /* last ROOT / SCALE seen on any track (a change is copied to all four) */
+    uint8_t brk;                 /* PLAY is down: the BREAK */
+    int32_t dive;                /* the BREAK's dive, Q12: the rest sinks into reverb and reverse delay; it comes up slowly */
+    int32_t kfade;               /* the kick's level after a BREAK, Q12: out fast, back in slowly */
     int32_t duck;                /* the kick's dip of the other tracks' level, Q12 (4096: none); it recovers in maku_block */
 } maku;
 
@@ -369,6 +372,13 @@ static __attribute__((noinline)) void maku_block(void)
     } else {
         maku.rise_q = (uint16_t)(maku.rise_q > 60u ? maku.rise_q - 60u : 0u);
     }
+    if (maku.brk) {                                                /* PLAY held: ~1.5 s down, the kick out in ~50 ms */
+        maku.dive = maku.dive + 3 > 4096 ? 4096 : maku.dive + 3;
+        maku.kfade = maku.kfade > 64 ? maku.kfade - 64 : 0;
+    } else {                                                       /* let go: the kick returns over ~3 s, the dive lifts with it */
+        maku.dive = maku.dive > 1 ? maku.dive - 1 : 0;
+        maku.kfade = maku.kfade + 1 > 4096 ? 4096 : maku.kfade + 1;
+    }
     maku.duck += (4096 - maku.duck) / 160 + (maku.duck < 4096);   /* back up in ~120 ms (CTL blocks) */
     if (maku.duck > 4096)
         maku.duck = 4096;
@@ -387,7 +397,15 @@ static __attribute__((noinline)) void maku_block(void)
  * 4096 with MAKU off, so every other mix is bit for bit as before */
 static int32_t maku_gain(uint32_t i)
 {
-    if (!maku.on || i == MAKU_KICK)
+    if (!maku.on)
         return 4096;
+    if (i == MAKU_KICK)
+        return maku.kfade;
     return i == MAKU_ARP ? 4096 - (4096 - maku.duck) / 2 : maku.duck;
+}
+
+/* the BREAK's depth for fx.c (Q12) */
+static int32_t maku_dive(void)
+{
+    return maku.on ? maku.dive : 0;
 }

@@ -1158,6 +1158,8 @@ static void maku_sound(uint32_t i, uint32_t pre)
 static void maku_setup(void)
 {
     uint32_t i, j;
+    maku.kfade = 4096;                                /* (the BREAK's fade-in: a new world starts with the kick full) */
+    maku.dive = 0;
     for (i = 0; i < NTRK; i++)
         maku_sound(i, MAKU_R[i].pre);
     trk[MAKU_DRA].p[P_LRATE] = 36;                    /* SWAY's slow LFO on the drone's filter */
