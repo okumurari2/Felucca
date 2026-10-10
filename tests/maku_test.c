@@ -615,10 +615,7 @@ static int worlds_voices(void)
         for (i = 0; i < NTRK; i++)
             trk[i].engine = trk[i].eng_req;
         for (b = 0; b < nb; b++) {
-            uint32_t v0 = vage, before = 0;
-            for (i = 0; i < NTRK; i++)
-                for (k = 0; k < NVOICE; k++)
-                    before += trk[i].v[k].active != 0;
+            uint32_t k0 = voice_kills;
             memset(o, 0, sizeof o);
             mix_block(o, CTL);
             act = 0;
@@ -626,7 +623,7 @@ static int worlds_voices(void)
                 for (k = 0; k < NVOICE; k++)
                     act += trk[i].v[k].active != 0;
             maxact = act > maxact ? act : maxact;
-            steals += before >= NVOICE && vage > v0;
+            steals += voice_kills - k0;               /* (a voice given up for another part's note) */
         }
         ins_sounding += (trk[MAKU_DRA].p[P_ITYPE] != IT_OFF && trk[MAKU_DRA].p[P_IMIX] > 0 && ins[MAKU_DRA].w != 0) +
                         (trk[MAKU_DRB].p[P_ITYPE] != IT_OFF && trk[MAKU_DRB].p[P_IMIX] > 0 && ins[MAKU_DRB].w != 0);
@@ -651,6 +648,90 @@ static int worlds_voices(void)
         maku_macro_set(MAKU_DRA, 1, 127);
         bad += check("INSERT: the drone's TONE macro moves its MIX up to 110, within 0 .. 127", mono && trk[MAKU_DRA].p[P_IMIX] == 110);
     }
+    return bad;
+}
+
+
+/* The voice catalog (docs/VOICES_RATING.md, maku_voices.c): 120 worlds at DENSITY 127 with OPEN and LOOSE 127 over 9 bars each (more than a
+ * chord cycle of the held drone): never a voice taken from another part, held voices actually hold, and the mix of articulations is
+ * what the catalog promises: the floor held in 65..85 % of the worlds, at least one of floor and haze held in every one, the
+ * struck voices in the rest */
+static int catalog(void)
+{
+    int bad = 0;
+    int32_t o[2u * CTL];
+    uint32_t w, b, i, k, nb = 9u * BAR_STEPS * step_blocks(), act, maxact = 0, steals = 0;
+    uint32_t floor_held = 0, none_held = 0, arp_slow = 0, arp_struck = 0, n = 120u;
+    uint32_t held_gap_blocks = 0, held_blocks = 0, art_seen[5] = {0}, rows_seen = 0;
+    uint8_t seen[4][16] = {{0}};
+    for (w = 1; w <= n; w++) {
+        uint32_t fa, fb, quiet_a = 0, quiet_b = 0, ea, eb, pk[4] = {0}, st0 = steals;
+        start(127);
+        maku_world(w * 104729u);
+        maku_macro_set(MAKU_DRA, 0, 127);
+        maku_macro_set(MAKU_ARP, 0, 127);
+        maku_set_density(127);
+        for (i = 0; i < NTRK; i++)
+            trk[i].engine = trk[i].eng_req;
+        fa = maku_held(MAKU_DRA);
+        fb = maku_held(MAKU_DRB);
+        floor_held += fa;
+        none_held += !fa && !fb;
+        arp_slow += maku_held(MAKU_ARP);
+        arp_struck += !maku_held(MAKU_ARP);
+        for (i = 1; i < 4u; i++) {
+            art_seen[maku.art[i]]++;
+            seen[i][maku.voice[i] & 15u] = 1;
+        }
+        ea = trk[MAKU_DRA].eng_req;
+        eb = trk[MAKU_DRB].eng_req;
+        for (b = 0; b < nb; b++) {
+            uint32_t k0 = voice_kills, before = 0, ad = 0, bd = 0;
+            for (i = 0; i < NTRK; i++)
+                for (k = 0; k < NVOICE; k++)
+                    before += trk[i].v[k].active != 0;
+            memset(o, 0, sizeof o);
+            mix_block(o, CTL);
+            act = 0;
+            for (i = 0; i < NTRK; i++)
+                for (k = 0; k < NVOICE; k++) {
+                    act += trk[i].v[k].active != 0;
+                    ad += i == MAKU_DRA && trk[i].v[k].active;
+                    bd += i == MAKU_DRB && trk[i].v[k].active;
+                }
+            maxact = act > maxact ? act : maxact;
+            steals += voice_kills - k0;           /* voices given up for another part's note (voice_kill) */
+            for (i = 0; i < NTRK; i++) {
+                uint32_t c = 0;
+                for (k = 0; k < NVOICE; k++)
+                    c += trk[i].v[k].active != 0;
+                pk[i] = c > pk[i] ? c : pk[i];
+            }
+            if (b > nb / 9u) {                       /* (after the first bar: the held parts have started) */
+                quiet_a += fa && !ad;
+                quiet_b += fb && !bd;
+            }
+        }
+        if (getenv("MAKU_DBG"))
+            printf("  w%3u %-13s %-12s %-13s peak voices k%u a%u b%u c%u steals %u\n", w, MAKU_V_DRA[maku.voice[1]].name, MAKU_V_DRB[maku.voice[2]].name,
+                   MAKU_V_ARP[maku.voice[3]].name, pk[0], pk[1], pk[2], pk[3], steals - st0);
+        held_gap_blocks += quiet_a + quiet_b;
+        held_blocks += (fa + fb) * (nb - nb / 9u);
+        (void)ea; (void)eb;
+    }
+    for (i = 1; i < 4u; i++)
+        for (k = 0; k < 16u; k++)
+            rows_seen += seen[i][k];
+    printf("ui:   catalog, %u worlds: floor held %u, none of floor / haze held %u, slow melody %u / struck %u; most voices at once %u, steals %u; "
+           "held parts silent in %u of %u blocks; %u rows of the catalog seen\n",
+           n, floor_held, none_held, arp_slow, arp_struck, maxact, steals, held_gap_blocks, held_blocks, rows_seen);
+    bad += check("CATALOG: no voice is ever taken from another part (held voices, swells and bowed sounds included)", steals == 0u);
+    bad += check("CATALOG: the floor is held in 65..85 % of the worlds, and in every world the floor or the haze is held",
+                 floor_held * 100u >= 65u * n && floor_held * 100u <= 85u * n && none_held == 0u);
+    bad += check("CATALOG: held voices hold (silent less than 2 % of the blocks after the first bar)", held_blocks && held_gap_blocks * 50u < held_blocks);
+    bad += check("CATALOG: a slow melody and a struck one both occur; all five articulations are heard over the parts",
+                 arp_slow >= 5u && arp_struck >= 5u && art_seen[ART_STRK] && art_seen[ART_SOFT] && art_seen[ART_SWEL] && art_seen[ART_BOW] && art_seen[ART_HOLD]);
+    bad += check("CATALOG: most rows of the catalog turn up (>= 20 of 24)", rows_seen >= 20u);
     return bad;
 }
 
@@ -716,7 +797,7 @@ static int bench(void)
 
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + screen() + worlds_voices() + (getenv("MAKU_BENCH") ? bench() : 0);
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + screen() + worlds_voices() + catalog() + (getenv("MAKU_BENCH") ? bench() : 0);
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }

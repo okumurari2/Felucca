@@ -56,6 +56,13 @@ const colours = (fb) => new Set(fb).size;
 const a = await device(null);
 a.render(200);
 const splash = colours(a.screen());
+{ // the rating log's snapshot (web_snapshot; worklet.js snap names it): this boot's world, with its seed and voices
+  const ex = a.ex, total = ex.web_snap_info(3), w = new Int32Array(a.mem.buffer, ex.web_snapshot(), total).slice();
+  const name = (p) => { const b = new Uint8Array(a.mem.buffer, p, 16); let n = 0; while (b[n]) n++; return new TextDecoder().decode(b.subarray(0, n)); };
+  check("snapshot: layout 1, catalog >= 1, world 1, a tempo of 70..90, a key and a scale", w[0] === 1 && w[1] >= 1 && w[3] === 1 && w[4] >= 70 && w[4] <= 90 && w[5] < 12 && w[6] > 0);
+  check("snapshot: the floor, the haze and the voice each have a catalog name", [1, 2, 3].every((t) => name(ex.web_voice_name(t)).length > 0));
+  check("snapshot: parameter labels come with it (LVL first)", name(ex.web_param_label(1, 0)) === "LVL");
+}
 { // the power-on LED sweep (hal/fm1_led_anim.h) under the splash: at 200 ms its head on the middle of the keyboard, the
   // keys it passed glowing (DIM HI), the ones ahead dark, the buttons not yet; the UI's LEDs untouched until it ends
   const p = a.ex.web_anim_levels(), lv = p ? Array.from(new Uint8Array(a.mem.buffer, p, 41)) : [];

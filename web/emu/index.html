@@ -547,13 +547,13 @@ function download(name, type, text) {
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
 function flatten(r) {
-  const o = { time: r.time, rating: r.rating, note: r.note, catalog: r.catalog, seed: r.seed, world: r.world,
+  const o = { time: r.time, rating: r.rating, replay: location.origin + location.pathname + "#seed=" + r.seed, note: r.note, catalog: r.catalog, seed: r.seed, world: r.world,
               world_age_s: +(r.world_age_ms / 1000).toFixed(1), short: r.world_age_ms < 10000 ? 1 : 0,
               bpm: r.bpm, root: r.root, scale: r.scale, dens: r.dens, dens_eff: r.dens_eff, open: r.open, loose: r.loose,
               focus: r.focus, buttons: r.buttons, perf_held: r.perf_held, flags: r.flags };
   r.macros.forEach((v, i) => { o["m" + (i / 3 | 0) + "." + (i % 3)] = v; });
   r.tracks.forEach((t, i) => {
-    o["t" + i + ".eng"] = t.eng; o["t" + i + ".voice"] = t.voice;
+    o["t" + i + ".eng"] = t.eng; o["t" + i + ".voice"] = t.voice; o["t" + i + ".name"] = t.name; o["t" + i + ".art"] = t.art;
     t.labels.forEach((l, j) => { if (l) o["t" + i + "." + l + (t.labels.indexOf(l) !== j ? "_" + j : "")] = t.p[j]; });
   });
   return o;

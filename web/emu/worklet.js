@@ -87,7 +87,7 @@ if (typeof registerProcessor === "function") {
       for (let t = 0; t < 4; t++, k += 2 + np) {
         const labels = [];
         for (let j = 0; j < np; j++) labels.push(str(ex.web_param_label(t, j)));
-        tracks.push({ eng: w[k], voice: w[k + 1], labels, p: Array.from(w.subarray(k + 2, k + 2 + np)) });
+        tracks.push({ eng: w[k], voice: w[k + 1], name: str(ex.web_voice_name(t)), art: ex.web_voice_art(t), labels, p: Array.from(w.subarray(k + 2, k + 2 + np)) });
       }
       this.port.postMessage({ type: "snap", id, data: {
         layout: w[0], catalog: w[1], seed: w[2] >>> 0, world: w[3], bpm: w[4], root: w[5], scale: w[6],

@@ -47,9 +47,51 @@ static struct {
     int32_t kfade;               /* the kick's level after a BREAK, Q12: out fast, back in slowly */
     uint32_t seed;               /* the seed of this world (maku_world): the same seed and catalog give the same world */
     uint16_t world_n;            /* worlds made since power-on (the emulator's rating log names a rating by it) */
-    uint8_t voice[4];            /* the catalog row each track plays (MAKU_VOICES); 0xFF: none */
+    uint8_t voice[4];            /* the catalog row each track plays (maku_voices.c); 0xFF: none */
+    uint8_t art[4];              /* how each track sounds (ART_*): from the catalog row */
+    uint8_t atk0[4], rel0[4];    /* the track's ATK / REL of its articulation: a sustained voice's macros move around them */
     int32_t duck;                /* the kick's dip of the other tracks' level, Q12 (4096: none); it recovers in maku_block */
 } maku;
+
+/* How a part sounds (docs/VOICES_RATING.md). STRK: struck, over at once; SOFT: struck softly (slower attack); SWEL: swells
+ * in and is held to the next note; BOW: an exciter that keeps sounding, held; HOLD: a drone held until the chord changes.
+ * Ties (ST_TIE) hold a note from step to step; the track's DIV is slower for the drones, so a swell has time to arrive */
+enum { ART_STRK, ART_SOFT, ART_SWEL, ART_BOW, ART_HOLD };
+static uint32_t maku_held(uint32_t i) { return maku.art[i] >= ART_SWEL; }
+#define MAKU_SLOW 4u             /* a slow melody (SWEL / BOW arp): one note per 4 steps, held through them */
+#define MAKU_SHIM_HOLD_A 6u      /* the shimmer: note A (step 0) holds through step 5, the dyad (step 7) through step 11 */
+
+/* is step idx of track i a TIE: it holds what plays. A pure function of (track, step): seq_step asks for the next one too */
+static uint32_t maku_is_tie(uint32_t i, uint32_t idx)
+{
+    if (!maku.on || !maku_held(i))
+        return 0;
+    switch (i) {
+    case MAKU_DRA:
+        idx %= 19u;
+        return idx != 0 && idx != 18u;                  /* the chord holds to step 17; step 18 lets go before the next one */
+    case MAKU_DRB:
+        return (idx > 0 && idx < MAKU_SHIM_HOLD_A) || (idx > 7u && idx < 12u);
+    case MAKU_ARP:
+        return idx < MAKU_ARP_GAP && idx % MAKU_SLOW;
+    }
+    return 0;
+}
+
+/* The 8 voices are shared: a held part sounds all the time (and its tails ring on), so it gets a share and keeps to it: the
+ * floor 3 (a chord of three, or two and a tail), the haze 2, the arp 2, the kick 1 (and the struck floor / haze as before). 0: none */
+static uint32_t maku_voice_cap(const track_t *t)
+{
+    uint32_t i = trk_index(t);
+    if (!maku.on || i == MAKU_KICK || i >= 4u)
+        return 0;
+    if (i == MAKU_ARP)
+        return 2u;                                      /* (a struck arp's tails too: it never takes the haze's or the floor's) */
+    if (!maku_held(i))
+        return 0;
+    /* (a held PHYS model is exciting all the time, 12 modes a voice: the floor of 2 voices, not 3) */
+    return i == MAKU_DRA && ENGINES[t->engine] != &ENG_PHYS ? 3u : 2u;
+}
 
 static uint32_t maku_hash(uint32_t i)
 {
@@ -136,6 +178,7 @@ static const struct { const char *name; mm_t m[3]; } MAKU_MAC[4][3] = {
     },
 };
 
+static mm_t maku_tone[4][3];         /* each track's TONE macro (j = 1): MAKU_MAC's, or the voice's own (maku_voices.c) */
 static void maku_set_density(uint32_t d);
 /* macro j of track i to v (0..127): stored, and every parameter it owns moves */
 static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
@@ -146,9 +189,17 @@ static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
     v = v > 127u ? 127u : v;
     maku.m[i][j] = (uint8_t)v;
     for (n = 0; n < 3u; n++) {
-        const mm_t *e = &MAKU_MAC[i][j].m[n];
-        if (e->p != MM_NONE)
-            trk[i].p[e->p] = (int16_t)(e->lo + ((int32_t)(e->hi - e->lo) * (int32_t)v + (e->hi >= e->lo ? 63 : -63)) / 127);
+        const mm_t *e = j == 1u ? &maku_tone[i][n] : &MAKU_MAC[i][j].m[n];
+        int32_t lo = e->lo, hi = e->hi;
+        if (e->p == MM_NONE)
+            continue;
+        if (maku_held(i) && (e->p == P_ATK || e->p == P_REL)) {   /* a held part: ATK / REL move around the voice's own */
+            lo = (e->p == P_ATK ? maku.atk0[i] : maku.rel0[i]) - 12;
+            hi = lo + 24;
+            lo = lo < 0 ? 0 : lo;
+            hi = hi > 127 ? 127 : hi;
+        }
+        trk[i].p[e->p] = (int16_t)(lo + ((hi - lo) * (int32_t)v + (hi >= lo ? 63 : -63)) / 127);
     }
     if (i == MAKU_DRB && j == 2)
         fx_rvs = (uint8_t)(v < 20u ? 0u : (v - 20u) * 90u / 107u);   /* AIR: the reverse swell comes in above ~20 */
@@ -236,6 +287,10 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
     uint32_t d = maku_eff(), vel;
     memset(out, 0, sizeof *out);
     out->time = ST_NOTE;
+    if (maku_is_tie(i, idx)) {                      /* a held part: this step only extends the note */
+        out->time = ST_TIE;
+        return 1;
+    }
     switch (i) {
     case MAKU_KICK:
         if (idx >= 16u)
@@ -273,8 +328,10 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         {
             const uint8_t *c = MAKU_CHORD[(idx / 19u + 3u * maku.cyc_a) % 6u];   /* (3 a cycle: six chords in two cycles) */
             uint32_t k, nv = 2u + maku.open / 43u;       /* OPEN: 2 voices .. root, 5th, octave and the 9th above */
-            if (nv > 3u && d >= 90u)
-                nv = 3u;                                /* (dense and open: the voices run out) */
+            if ((nv > 3u && d >= 90u) || maku_held(MAKU_DRA))
+                nv = 3u;                                /* (dense and open: the voices run out; a held drone has its cap) */
+            if (maku_held(MAKU_DRA) && nv > maku_voice_cap(t))
+                nv = maku_voice_cap(t);
             for (k = 0; k < 3u && k < nv; k++)
                 out->note[k] = (uint8_t)maku_note(t, c[k], 36u);
             if (nv > 3u)
@@ -305,6 +362,8 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             maku.run_left = 0;
             return 0;
         }
+        if (maku_held(MAKU_ARP) && idx % MAKU_SLOW)   /* a slow melody moves on every 4th step only */
+            return 0;
         if (d < 16u || (uint32_t)(rng() % 100u) >= 15u + (d - 16u) * 85u / 95u)
             return 0;
         if (!maku.run_left) {                       /* jump: a random place, a run of 3..8 (shorter when dense) */

@@ -1119,11 +1119,16 @@ static const struct { uint8_t eng, pre, len, lvl, rev, dly; } MAKU_R[NTRK] = {
     {ENGI_PHYS, 4, MAKU_ARP_LEN, 78, 85, 70},          /* ARP: PHYS KALIMBA, into the delay and the room */
 };
 /* track i's sound: its engine and preset `pre`, the pattern emptied (maku_step plays it), and the part's own settings */
-static void maku_sound(uint32_t i, uint32_t pre)
+static void maku_sound(uint32_t i, uint32_t eng, uint32_t pre)
 {
     track_t *t = &trk[i];
-    set_engine_of(t, MAKU_R[i].eng);
-    if (MAKU_R[i].eng != ENGI_DRUM)
+    uint32_t k;
+    maku.art[i] = ART_STRK;                   /* (the catalog row sets these: maku_voice_apply) */
+    maku.voice[i] = 0xFFu;
+    for (k = 0; k < 3u; k++)
+        maku_tone[i][k] = MAKU_MAC[i][1].m[k];
+    set_engine_of(t, eng);
+    if (eng != ENGI_DRUM)
         apply_preset_to(t, pre);
     memset(t->step, 0, sizeof t->step);
     t->seq_active = 0;
@@ -1155,13 +1160,14 @@ static void maku_sound(uint32_t i, uint32_t pre)
     if (i != MAKU_KICK)                       /* and every held sound rings on after its short gate */
         t->p[P_REL] = i == MAKU_ARP ? 50 : 70;   /* (measured: tails this long keep the four parts under 8 voices) */
 }
+#include "maku_voices.c"                       /* the catalog: the floor, the haze and the voice, by articulation */
 static void maku_setup(void)
 {
     uint32_t i, j;
     maku.kfade = 4096;                                /* (the BREAK's fade-in: a new world starts with the kick full) */
     maku.dive = 0;
     for (i = 0; i < NTRK; i++)
-        maku_sound(i, MAKU_R[i].pre);
+        maku_sound(i, MAKU_R[i].eng, MAKU_R[i].pre);
     trk[MAKU_DRA].p[P_LRATE] = 36;                    /* SWAY's slow LFO on the drone's filter */
     for (i = 0; i < 4u; i++)
         for (j = 0; j < 3u; j++)
@@ -1192,12 +1198,16 @@ static void maku_world(uint32_t seed)
     rng_state = seed ? seed : 0x1234567u;
     for (i = 0; i < 4u; i++)
         (void)rng();                                          /* (a xorshift shows its seed for a few draws) */
-    {   /* the voices: a few presets of each part's engine that suit it (PHYS: 0 BELL TREE, 1 MARIMBA, 2 PLUCK, 3 BOWED
-         * METAL, 4 KALIMBA, 7 DRONE STRING, 8 HARP; GRAIN: 0 CLOUD PAD, 2 FROZEN, 3 SHIMMER) */
-        static const uint8_t DRA[] = {7, 8, 3}, DRB[] = {0, 2, 3}, ARP[] = {4, 1, 2, 0, 8};
-        maku_sound(MAKU_DRA, DRA[rng() % sizeof DRA]);
-        maku_sound(MAKU_DRB, DRB[rng() % sizeof DRB]);
-        maku_sound(MAKU_ARP, ARP[rng() % sizeof ARP]);
+    {   /* the voices (maku_voices.c): a row of each part's list by weight, with an articulation. The floor and the haze are
+         * held (swell, bowed, drone) most of the time and at least one of them always is; a slow melody is rarer when
+         * both are; a second PHYS bowed sound is left out */
+        uint32_t a = maku_voice_pick(MAKU_DRA, ARTS_ALL, 0), pb = MAKU_V_DRA[a].art == ART_BOW && MAKU_V_DRA[a].eng == ENGI_PHYS;
+        uint32_t b = maku_voice_pick(MAKU_DRB, MAKU_V_DRA[a].art >= ART_SWEL ? ARTS_ALL : ARTS_HELD, pb), c;
+        uint32_t both = MAKU_V_DRA[a].art >= ART_SWEL && MAKU_V_DRB[b].art >= ART_SWEL;
+        c = maku_voice_pick(MAKU_ARP, both && rng() % 2u ? ARTS_STRUCK : ARTS_ALL, pb || (MAKU_V_DRB[b].art == ART_BOW && MAKU_V_DRB[b].eng == ENGI_PHYS));
+        maku_voice_apply(MAKU_DRA, a);
+        maku_voice_apply(MAKU_DRB, b);
+        maku_voice_apply(MAKU_ARP, c);
         trk[MAKU_DRA].p[P_LRATE] = 36;
     }
     {   /* the INSERT: a slow sweep on the drone and, less often, the shimmer (or none: the macros' MIX then does nothing).

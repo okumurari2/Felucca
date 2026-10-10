@@ -57,9 +57,12 @@ static void track_lfo_tick(track_t *t)
 }
 
 /* voices the engine may use (POLY and UNISON): its cap, else all of them */
+static uint32_t maku_voice_cap(const track_t *t);      /* maku.c: a held part's share of the 8, 0 = none */
 static uint32_t trk_nvoice(const track_t *t)
 {
-    uint32_t c = ENGINES[t->engine]->poly;
+    uint32_t c = ENGINES[t->engine]->poly, m = maku_voice_cap(t);
+    if (m && (!c || m < c))
+        c = m;
     return c && c < NVOICE ? c : NVOICE;
 }
 

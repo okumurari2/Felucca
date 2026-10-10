@@ -478,14 +478,13 @@ EXPORT void web_test_heavy(void)
 /* The rating log (docs/VOICES_RATING.md): everything that decides what is sounding now, as int32 for the page to name.
  * Head, then the 12 macros, then per track {engine, catalog voice, P_COUNT raw parameters}. web_snap_info says the layout. */
 #define SNAP_HEAD 16u
-#define MAKU_CATALOG 1u                         /* the voice catalog's version: ratings of other versions are not compared */
 static int32_t web_snap[SNAP_HEAD + 12u + 4u * (2u + P_COUNT)];
 EXPORT int32_t *web_snapshot(void)
 {
     int32_t *o = web_snap;
     uint32_t i, j, k = 0;
     o[k++] = 1;                                 /* layout version */
-    o[k++] = (int32_t)MAKU_CATALOG;
+    o[k++] = (int32_t)MAKU_CATALOG_VERSION;       /* (maku_voices.c: ratings of other catalogs are not compared) */
     o[k++] = (int32_t)maku.seed;
     o[k++] = maku.world_n;
     o[k++] = song.g[G_BPM];
@@ -515,6 +514,13 @@ EXPORT uint32_t web_snap_info(uint32_t what)    /* 0 head, 1 macros, 2 P_COUNT, 
 {
     return what == 0 ? SNAP_HEAD : what == 1 ? 12u : what == 2 ? (uint32_t)P_COUNT : (uint32_t)(sizeof web_snap / 4u);
 }
+/* the catalog name of the sound track i plays ("GLASS", "SINE LINE"; "" before a world, and for the kick) and its articulation */
+EXPORT const char *web_voice_name(uint32_t i)
+{
+    i %= 4u;
+    return i && maku.voice[i] != 0xFFu ? MAKU_V[i].v[maku.voice[i]].name : "";
+}
+EXPORT uint32_t web_voice_art(uint32_t i) { return maku.art[i % 4u]; }
 /* parameter j's label ("ATK", "REV", an engine's own E0..E7 by the track's engine) for the log's column names */
 EXPORT const char *web_param_label(uint32_t track, uint32_t j)
 {
