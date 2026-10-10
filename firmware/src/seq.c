@@ -37,6 +37,13 @@ static uint32_t kb_prev;
 static volatile uint8_t kb_boot_hold;    /* #137: set from power-on to the end of the splash (main.c): the keys sound nothing,
                                           * and one held across its end stays silent until it is let go and pressed again */
 static uint8_t kb_note[27], kb_trk[27];  /* per key: the note it started and on which track */
+static uint8_t in_key;                   /* the key (+ 1) whose notes go into input_on now (key_on), 0: none (MIDI IN) */
+/* #191 (Felucca 1.5): where each track's held[i] came from, so the arp maps it again as it plays (arp_list: TRN, ROOT,
+ * SCALE, QNT as they are now). held_key: the key + 1 (bits 0..4) and the octave buttons then + 3 (bits 5..7); 0: not a
+ * key's own mapping (MIDI IN, the DRUM grid, an engine's own key map), held[i] plays as it is. held_dt: held[i] above
+ * the key's note (a CHRD chord's other notes). Out of track_t: its size stays as the audio ISR's trk[] indexing wants it */
+static uint8_t held_key[NTRK][16];
+static int8_t held_dt[NTRK][16];
 static volatile uint8_t kb_asleep;       /* MENU > SCREEN OFF (ui.c): the screen dark or waking, a key pressed now only
                                           * wakes it (silent, no layer, its release nothing) */
 static uint8_t last_note = 60;
@@ -80,19 +87,24 @@ enum { QN_OFF, QN_SNAP, QN_WHITE, QN_SEQ };      /* P_QUANT */
 
 #include "maku.c"                                  /* the interlude mode: DENSITY joins a drone, a kick and an arp */
 
-static uint32_t kb_map(const track_t *t, uint32_t k)
+/* the engine's own key map (DRUM's GM map, slices) for key k, -1 none */
+static int32_t kb_engine(const track_t *t, uint32_t k)
+{
+    const engine_t *e = ENGINES[eng_idx(t->eng_req)];   /* (the engine it switches to) */
+    return e->keys ? e->keys(t, k) : -1;
+}
+
+/* key k's note with the octave buttons at oct: QNT, ROOT, SCALE, TRN (KB_SILENT: a black key under WHITE). The keys
+ * (kb_map) and the arp's latched keys (arp_list, #191: as the keys play now, the octave they were pressed in) */
+static uint32_t kb_pitch(const track_t *t, uint32_t k, int32_t oct)
 {
     static const int8_t DEGREE[12] = {0, -1, 1, -1, 2, 3, -1, 4, -1, 5, -1, 6};
-    const engine_t *e = ENGINES[eng_idx(t->eng_req)];   /* (the engine it switches to) */
-    int32_t n;
-    if (e->keys && (n = e->keys(t, k)) >= 0)           /* the engine's own key map (DRUM's GM map, slices) */
-        return (uint32_t)n;
-    n = 53 + (int32_t)k;
+    int32_t n = 53 + (int32_t)k;
     if (t->p[P_QUANT] == QN_SNAP || t->p[P_QUANT] == QN_SEQ)   /* SNAP (and SEQ): every key, rounded down */
-        return (uint32_t)clamp(scale_snap(t, n + 12 * song.octave + t->p[P_TRANS]), 0, 127);
+        return (uint32_t)clamp(scale_snap(t, n + 12 * oct + t->p[P_TRANS]), 0, 127);
     if (t->p[P_QUANT] == QN_WHITE) {                    /* WHITE: white keys walk the scale, black keys are silent */
         uint32_t mask = scale_mask(t), i;
-        int32_t count = 0, degree = DEGREE[n % 12], oct;
+        int32_t count = 0, degree = DEGREE[n % 12], wo;
         if (degree < 0)
             return KB_SILENT;
         /* C4 is the root. Walk scale degrees on successive white keys, including
@@ -100,11 +112,11 @@ static uint32_t kb_map(const track_t *t, uint32_t k)
         degree += (n / 12 - 5) * 7;
         for (i = 0; i < 12u; i++)
             count += (mask >> i) & 1u;
-        oct = degree / count;
+        wo = degree / count;
         degree %= count;
         if (degree < 0) {
             degree += count;
-            oct--;
+            wo--;
         }
         for (i = 0; i < 12u; i++)
             if ((mask >> i) & 1u) {
@@ -112,9 +124,15 @@ static uint32_t kb_map(const track_t *t, uint32_t k)
                     break;
                 degree--;
             }
-        n = 60 + t->p[P_ROOT] + 12 * oct + (int32_t)i;
+        n = 60 + t->p[P_ROOT] + 12 * wo + (int32_t)i;
     }
-    return (uint32_t)clamp(n + 12 * song.octave + t->p[P_TRANS], 0, 127);
+    return (uint32_t)clamp(n + 12 * oct + t->p[P_TRANS], 0, 127);
+}
+
+static uint32_t kb_map(const track_t *t, uint32_t k)
+{
+    int32_t n = kb_engine(t, k);
+    return n >= 0 ? (uint32_t)n : kb_pitch(t, k, song.octave);
 }
 
 #include "chord.c"
@@ -122,15 +140,23 @@ static uint32_t kb_map(const track_t *t, uint32_t k)
 /* ------------------------------------------------------------- arp --- */
 static void arp_add(track_t *t, uint32_t note)
 {
-    uint32_t i;
+    uint32_t i, k = in_key - 1u;
     if (t->p[P_AHOLD] && t->arp_phys == 0u)
         t->nheld = 0;                               /* new chord replaces the latched one */
     t->arp_phys++;                                  /* every key-down: arp_remove counts every key-up */
     for (i = 0; i < t->nheld; i++)
         if (t->held[i] == note)
             return;                                 /* repeated note-on: not a new note */
-    if (t->nheld < 16u)
+    if (t->nheld < 16u) {
+        /* #191: a key the track's scale keyboard maps (not the DRUM grid, not an engine's own map) is kept as that
+         * key, so TRN, ROOT, SCALE and QNT reach the notes the arp holds (arp_list); the octave stays the one it was
+         * pressed in. Anything else (MIDI IN) plays as it came, as before */
+        uint8_t *hk = held_key[trk_index(t)];
+        hk[t->nheld] = in_key && song.grid != 1u && kb_engine(t, k) < 0
+                           ? (uint8_t)(in_key | (uint32_t)(song.octave + 3) << 5) : 0u;
+        held_dt[trk_index(t)][t->nheld] = (int8_t)(hk[t->nheld] ? (int32_t)note - kb_note[k] : 0);
         t->held[t->nheld++] = (uint8_t)note;
+    }
     if (t->nheld == 1u) {
         t->arp_pos = 0xFFFFFFF;                     /* fire on this block */
         t->arp_idx = 0xFFFFFFFFu;
@@ -140,13 +166,18 @@ static void arp_add(track_t *t, uint32_t note)
 static void arp_remove(track_t *t, uint32_t note)
 {
     uint32_t i, k = 0;
+    uint8_t *hk = held_key[trk_index(t)];
+    int8_t *dt = held_dt[trk_index(t)];
     if (t->arp_phys)
         t->arp_phys--;
     if (t->p[P_AHOLD])
         return;
     for (i = 0; i < t->nheld; i++)
-        if (t->held[i] != note)
+        if (t->held[i] != note) {
+            hk[k] = hk[i];
+            dt[k] = dt[i];
             t->held[k++] = t->held[i];
+        }
     t->nheld = (uint8_t)k;
 }
 
@@ -267,6 +298,45 @@ static __attribute__((noinline)) uint32_t arp_pick(track_t *t, uint32_t *list, u
  * gate counts down by (real time when the external transport stops: a tapped or latched note still ends) */
 static volatile uint32_t beat_pos, beat_n;      /* samples into the beat, the beat of the bar (0..3) */
 
+/* the arp's note list (list, its length returned; 0: nothing to play): the held notes (sorted or as played) over OCT
+ * octaves, *cnt of them. #191 (Felucca 1.5): the notes as they play now, a key's mapped again through kb_pitch (TRN,
+ * ROOT, SCALE, QNT now, the octave it was pressed in; a chord's note as far above it), the rest (MIDI IN) as they came;
+ * each once (two keys may meet on one note now), a key silent now (a black key, QNT WHITE since) left out. With nothing
+ * changed since the keys were pressed, exactly the list of held[] as before */
+static uint32_t arp_list(const track_t *t, uint32_t *list, uint32_t *cnt)
+{
+    uint32_t i, j, n = 0, x, s, last = 0, len = 0, o;
+    const uint8_t *hk = held_key[trk_index(t)];
+    const int8_t *dt = held_dt[trk_index(t)];
+    for (i = 0; i < t->nheld; i++) {
+        x = t->held[i];
+        if ((s = hk[i]) != 0u) {
+            x = kb_pitch(t, (s & 31u) - 1u, (int32_t)(s >> 5) - 3);
+            if (x == KB_SILENT)
+                continue;
+            x = (uint32_t)clamp((int32_t)x + dt[i], 0, 127);
+        }
+        last = x;
+        for (j = 0; j < n && list[j] != x; j++)
+            ;
+        if (j == n)
+            list[n++] = x;
+    }
+    *cnt = n;
+    if (!t->p[P_AORDER])
+        for (i = 1; i < n; i++)
+            for (j = i; j > 0 && list[j - 1] > list[j]; j--) {
+                x = list[j];
+                list[j] = list[j - 1];
+                list[j - 1] = x;
+            }
+    for (o = 0; o < (uint32_t)t->p[P_AOCT]; o++)
+        for (i = 0; i < n && len < 64u; i++)
+            list[len++] = clamp((int32_t)list[i] + 12 * (int32_t)o, 0, 127);
+    if (n && t->p[P_AMODE] == AM_REPEAT) { list[0] = last; len = 1; } /* REPEAT: last played note, no octave traversal */
+    return len;
+}
+
 /* the metronome (click.c) and the count-in (1.1, Discussion #131). The click follows the song tempo's quarter notes
  * (BPM, or the external clock's 24 pulses), 4 to the bar, the first accented, whatever a track's DIV or SWING: a beat is
  * four 1/16 steps as the sequencer counts them (click_beat_len: 4 x div_samples(1/16), which may be a few samples
@@ -294,7 +364,7 @@ static int click_wanted(void)                  /* CLICK REC: while a track is ar
 }
 static void arp_step(track_t *t, uint32_t n, uint32_t gate_n)
 {
-    uint32_t period, cnt, list[64], len = 0, i, j, o;
+    uint32_t period, cnt, list[64], len, j;
     int32_t sw;
     if (t->arp_note) {
         if (t->arp_off <= gate_n)
@@ -313,21 +383,11 @@ static void arp_step(track_t *t, uint32_t n, uint32_t gate_n)
     if (t->arp_pos < period + (uint32_t)((t->arp_idx & 1u) ? sw : -sw) && t->arp_pos != 0xFFFFFFF + n)
         return;
     t->arp_pos = 0;
-    /* build the note list: held notes (sorted or as played) over OCT octaves */
-    for (i = 0; i < t->nheld; i++)
-        list[i] = t->held[i];
-    cnt = t->nheld;
-    if (!t->p[P_AORDER])
-        for (i = 1; i < cnt; i++)
-            for (j = i; j > 0 && list[j - 1] > list[j]; j--) {
-                uint32_t x = list[j];
-                list[j] = list[j - 1];
-                list[j - 1] = x;
-            }
-    for (o = 0; o < (uint32_t)t->p[P_AOCT]; o++)
-        for (i = 0; i < cnt && len < 64u; i++)
-            list[len++] = clamp((int32_t)list[i] + 12 * (int32_t)o, 0, 127);
-    if (t->p[P_AMODE] == AM_REPEAT) { list[0] = t->held[t->nheld - 1u]; len = 1; } /* REPEAT: last played note, no octave traversal */
+    if (!(len = arp_list(t, list, &cnt))) {        /* (every key silent now: QNT WHITE's black keys) */
+        if (t->arp_note)
+            arp_off(t);
+        return;
+    }
     t->arp_idx++;
     j = t->p[P_AMODE] == AM_CHORD ? 0u : arp_pick(t, list, len);
     if (t->arp_note)
@@ -546,6 +606,7 @@ static void key_on(uint32_t k, track_t *t)
 {
     uint32_t n = chord_build(t, kb_note[k], kb_chord[k]), i, mc = trk_midi_ch(trk_index(t));
     kb_chn[k] = 0;
+    in_key = (uint8_t)(k + 1u);                     /* (the arp keeps the key: arp_add) */
     for (i = 0; i < n; i++) {
         uint32_t x = kb_chord[k][i];
         if (midi_local_held(t, x))
@@ -553,6 +614,7 @@ static void key_on(uint32_t k, track_t *t)
         input_on(t, x, 100);
         midi_out_event(0x09u | (0x90u | mc) << 8 | x << 16 | 100u << 24);
     }
+    in_key = 0;
     kb_chn[k] = (uint8_t)n;
     last_note = kb_note[k];                         /* (step entry, the SAMPLE zone: the key's note) */
 }

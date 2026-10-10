@@ -1139,6 +1139,11 @@ static void maku_sound(uint32_t i, uint32_t pre)
     t->p[P_REV] = MAKU_R[i].rev;
     t->p[P_DLY] = MAKU_R[i].dly;
     t->p[P_VOICE] = V_POLY;
+    t->p[P_ITYPE] = IT_OFF;                   /* the INSERT (fx.c, Felucca 1.5): a world gives the drones one (maku_world) */
+    t->p[P_IA] = TP[P_IA].def;
+    t->p[P_IB] = TP[P_IB].def;
+    t->p[P_IC] = TP[P_IC].def;
+    t->p[P_IMIX] = TP[P_IMIX].def;
     if (i == MAKU_KICK) {                     /* a round, low, long kick: KICK ROUND, TONE down, DECY up, SNAP down */
         t->p[P_E2] = 40;
         t->p[P_E3] = 110;
@@ -1190,6 +1195,19 @@ static void maku_world(uint32_t seed)
         maku_sound(MAKU_DRB, DRB[rng() % sizeof DRB]);
         maku_sound(MAKU_ARP, ARP[rng() % sizeof ARP]);
         trk[MAKU_DRA].p[P_LRATE] = 36;
+    }
+    {   /* the INSERT: a slow sweep on the drone and, less often, the shimmer (or none: the macros' MIX then does nothing).
+         * RATE 15..45 is 0.1 .. 0.5 Hz (LFO_INC's table); the TONE macros carry the MIX (MAKU_MAC) */
+        static const uint8_t DA[] = {IT_PHASER, IT_CHORUS, IT_OFF, IT_PHASER}, DB[] = {IT_OFF, IT_FLANGER, IT_CHORUS};
+        track_t *a = &trk[MAKU_DRA], *b = &trk[MAKU_DRB];
+        a->p[P_ITYPE] = DA[rng() % sizeof DA];
+        b->p[P_ITYPE] = DB[rng() % sizeof DB];
+        a->p[P_IA] = (int16_t)(15u + rng() % 31u);
+        b->p[P_IA] = (int16_t)(15u + rng() % 31u);
+        a->p[P_IB] = (int16_t)(50u + rng() % 70u);          /* DEPTH */
+        b->p[P_IB] = (int16_t)(50u + rng() % 70u);
+        a->p[P_IC] = (int16_t)(30u + rng() % 50u);          /* FDBK */
+        b->p[P_IC] = (int16_t)(30u + rng() % 50u);
     }
     trk[MAKU_DRA].p[P_ROOT] = (int16_t)(rng() % 12u);
     trk[MAKU_DRA].p[P_SCALE] = SC[rng() % sizeof SC];

@@ -173,7 +173,7 @@ int main(void)
 
     bad += check("layout: SLICER after DETUNE, then the matrix just before P_E0",
                  P_SLCR == P_DETUNE + 1 && P_SLDEPTH + 1 == P_M1SRC && P_M4AMT + 1 == P_FM1_ATK && P_FM4_LEVEL + 1 == P_CHRD && P_VOIC + 1 == P_LN0 &&
-                 P_LN7 + 1 == P_E0 && P_E0 == 91 && P_COUNT == PROJ_NP_V3 + 42u && PROJ_NP_V3 == PROJ_NP_V2 + 4u);
+                 P_LN7 + 1 == P_ITYPE && P_IMIX + 1 == P_E0 && P_E0 == 96 && P_COUNT == PROJ_NP_V3 + 47u && PROJ_NP_V3 == PROJ_NP_V2 + 4u);
     bad += check("FUN9 fits one flash object, the retained cache in NOINIT", sizeof(project_store_t) <= 4096u - 256u &&
                  sizeof(project_store_t) == 3648u && 0xC8u + 4u * sizeof(project_store_t) <= 0x3D50u);
 
@@ -415,9 +415,9 @@ int main(void)
         project_t a, c;
         project_store_t st, st2;
         uint32_t i, zero = 1;
-        bad += check("FUN9 name at the end of the reserved tail, the FM6 patches before it, after the data (48 spare)",
+        bad += check("FUN9 name at the end of the reserved tail, the FM6 patches before it, after the data (28 spare)",
                      PROJ_NAME_OFF == 3632u && PROJ_FM6_OFF == 3120u && 68u + NTRK * (P_COUNT + 2u + NSTEP * 9u) +
-                     sizeof(chain_config_t) + sizeof(motion_store_t) + 48u == PROJ_FM6_OFF);
+                     sizeof(chain_config_t) + sizeof(motion_store_t) + 28u == PROJ_FM6_OFF);
         memset(&a, 0, sizeof a);
         a.magic = PROJ_MAGIC; a.size = sizeof a; a.parts = NPART; a.phys = PROJ_PHYS;
         chain_defaults(&a.chain);
@@ -502,7 +502,7 @@ int main(void)
             memcpy(v8, st.raw, 68);
             v8[66] = 91;
             for (k = 0; k < NTRK; k++) {
-                for (j = 0; j < 91u; j++) v8[pos++] = st.raw[pos9 + (j < 83u ? j : j + 8u)];
+                for (j = 0; j < 91u; j++) v8[pos++] = st.raw[pos9 + (j < 83u ? j : j + (P_E0 - 83u))];
                 pos9 += P_COUNT;
                 memcpy(v8 + pos, st.raw + pos9, 2u + NSTEP * 9u);
                 pos += 2u + NSTEP * 9u; pos9 += 2u + NSTEP * 9u;

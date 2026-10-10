@@ -65,6 +65,7 @@ enum {                          /* per-track parameters */
     P_FM4_ATK, P_FM4_DEC, P_FM4_SUS, P_FM4_REL, P_FM4_LEVEL,
     P_CHRD, P_VOIC,                            /* chord keys (chord.c): one key plays a chord; its voicing */
     P_LN0, P_LN1, P_LN2, P_LN3, P_LN4, P_LN5, P_LN6, P_LN7,   /* DRUM lane levels (eng_drum.c, #97): KICK .. BELL */
+    P_ITYPE, P_IA, P_IB, P_IC, P_IMIX,         /* 1.5 (#78, #177): the INSERT, its TYPE, three values and MIX (fx.c) */
     P_E0, P_E1, P_E2, P_E3, P_E4, P_E5, P_E6, P_E7,
     P_COUNT
 };
@@ -310,7 +311,8 @@ typedef struct track {
     /* mix runtime */
     int32_t peak;
     int32_t dist_hp, dist_lp1, dist_lp2;   /* DIST insert state (fx.c) */
-    uint8_t tail;                /* blocks to mix after the last voice (the DIST tail) */
+    uint8_t tail;                /* blocks to mix after the last voice (the DIST / INSERT tail) */
+    uint8_t ins_run;             /* the INSERT still sounds (fx.c track_insert: its wet share above 0) */
     int16_t armp, aholdp;        /* P_AMODE / P_AHOLD as last seen by the ISR */
     /* engine switch (voice.c engine_block): the old engine's voices fade out, then it switches */
     uint8_t xf_on, xf;           /* fading; blocks of the fade still to render */
