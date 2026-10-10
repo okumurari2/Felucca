@@ -258,21 +258,21 @@ static int follow(void)
     uint32_t root;
     start(0);
     maku_block();
-    bad += check("FOLLOW: root C: the kick's TUNE is as designed (64)", trk[0].p[P_E1] == 64);
+    bad += check("FOLLOW: root C: the kick's TUNE is 2 semitones under the design (53)", trk[0].p[P_E1] == 53);
     for (root = 0; root < 12u; root++) {
         trk[1].p[P_ROOT] = (int16_t)root;
         maku_block();
-        ok &= trk[0].p[P_E1] >= 64 - 33 && trk[0].p[P_E1] <= 64 + 33;
+        ok &= trk[0].p[P_E1] >= 53 - 33 && trk[0].p[P_E1] <= 53 + 33;
     }
-    bad += check("  every root keeps the kick within +-6 semitones of its design (TUNE 31..97)", ok);
+    bad += check("  every root keeps the kick within +-6 semitones of its root pitch (TUNE 20..86)", ok);
     trk[1].p[P_ROOT] = 7;
     maku_block();
     {
         int16_t g = trk[0].p[P_E1];
         trk[1].p[P_ROOT] = 0;
         maku_block();
-        bad += check("  G (7) folds down a fourth: TUNE below the design; back to C: 64 again",
-                     g < 64 && trk[0].p[P_E1] == 64);
+        bad += check("  G (7) folds down a fourth: TUNE below the design; back to C: 53 again",
+                     g < 53 && trk[0].p[P_E1] == 53);
     }
     trk[2].p[P_ROOT] = 9;                             /* an edit on another track's SCL page */
     trk[2].p[P_SCALE] = 3;
@@ -623,7 +623,7 @@ static int fifths(void)
     down_for(B_OCTUP, 3);
     let_go(B_OCTUP);
     bad += check("FIFTHS: C major, OCT+: G major on all four tracks, the kick follows, the keys' octave untouched",
-                 trk[1].p[P_ROOT] == 7 && trk[0].p[P_ROOT] == 7 && trk[3].p[P_ROOT] == 7 && song.octave == 0 && trk[0].p[P_E1] < 64);
+                 trk[1].p[P_ROOT] == 7 && trk[0].p[P_ROOT] == 7 && trk[3].p[P_ROOT] == 7 && song.octave == 0 && trk[0].p[P_E1] < 53);
     down_for(B_OCTDN, 3);
     let_go(B_OCTDN);
     down_for(B_OCTDN, 3);

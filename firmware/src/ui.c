@@ -1149,10 +1149,10 @@ static void maku_sound(uint32_t i, uint32_t eng, uint32_t pre)
     t->p[P_IB] = TP[P_IB].def;
     t->p[P_IC] = TP[P_IC].def;
     t->p[P_IMIX] = TP[P_IMIX].def;
-    if (i == MAKU_KICK) {                     /* a round, low, long kick: KICK ROUND, TONE down, DECY up, SNAP down */
-        t->p[P_E2] = 40;
+    if (i == MAKU_KICK) {                     /* a round, low, long kick: KICK ROUND, TONE down (a shallow sweep), DECY up, SNAP down (little drive) */
+        t->p[P_E2] = 24;
         t->p[P_E3] = 110;
-        t->p[P_E4] = 20;
+        t->p[P_E4] = 8;
         t->p[P_E6] = 1;
     }
     if (i == MAKU_DRB)                        /* the shimmer fades in */
