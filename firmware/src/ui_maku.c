@@ -13,12 +13,22 @@ static const char *const MAKU_TRK_NAME[4] = {"PULSE", "FLOOR", "HAZE", "VOICE"};
 static const char *const MAKU_ROLE[3] = {"SELECT", "PRESETS", "ALGORITHM"};
 static const char MAKU_NUM[4][2] = {"1", "2", "3", "4"};
 
-/* each channel's colour (MONO / GREY: the theme's), shown wherever that channel is: its volume bar, its number, the
+/* each channel's colour (the black and white MONO: the theme's; GREY too shows them, this screen's one exception to
+ * its all-gray rule), shown wherever that channel is: its volume bar, its number, the
  * waveform and the macros while it is focused */
 static uint16_t mk_col(uint32_t i)
 {
     static const uint16_t C[4] = {RGB(255, 112, 88), RGB(255, 190, 56), RGB(72, 214, 130), RGB(92, 168, 255)};
-    return ux.mono ? T_THEME : C[i & 3u];
+    return settings.palette == UI_BW_INDEX ? T_THEME : C[i & 3u];
+}
+
+/* a toward b by pct %, per channel (ux_mix would gray it in GREY) */
+static uint16_t mk_mix(uint16_t a, uint16_t b, int32_t pct)
+{
+    uint32_t r = (uint32_t)((a >> 11) * (100 - pct) + (b >> 11) * pct) / 100u;
+    uint32_t g = (uint32_t)(((a >> 5) & 63u) * (100 - pct) + ((b >> 5) & 63u) * pct) / 100u;
+    uint32_t bl = (uint32_t)((a & 31u) * (100 - pct) + (b & 31u) * pct) / 100u;
+    return (uint16_t)((r << 11) | (g << 5) | bl);
 }
 
 static void mq_gauge(int32_t x, int32_t y, int32_t w, int32_t v, uint16_t c)
@@ -88,7 +98,7 @@ static void mq_top_left(void)
     }
     for (i = 0; i < 4u; i++) {                          /* the four volumes: wide bars, numbered, each its colour */
         int32_t bx = 4 + (int32_t)i * 29, bh = 38, h = trk[i].p[P_LEVEL] * bh / 127;
-        uint16_t cc = mk_col(i), c = i == f ? (ui.hot_t && ui.hot_col == i ? T_ACCENT : cc) : ux_mix(cc, T_BG, 55);
+        uint16_t cc = mk_col(i), c = i == f ? (ui.hot_t && ui.hot_col == i ? T_ACCENT : cc) : mk_mix(cc, T_BG, 55);
         cv_rect(bx, 64, 25, bh, T_LINE);
         cv_rect(bx, 64 + bh - h, 25, h, c);
         cv_text(bx + (25 - text_w(&AF_S, MAKU_NUM[i])) / 2, 104, &AF_S, MAKU_NUM[i], i == f ? cc : T_MID);
