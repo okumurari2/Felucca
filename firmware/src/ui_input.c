@@ -1087,7 +1087,7 @@ static void maku_knobs(uint32_t glo)
 }
 
 /* AMBIENT.md: the buttons are verbs. Held ones: FX freeze, ENV tape stop, LFO filter sweep, SAVE beat repeat, EDIT
- * harmonizer + shimmer (all perform.c), PLAY pulls the kick out, SEQ the riser. Toggles: ARP, REC. HOME held: a new
+ * harmonizer + shimmer (all perform.c), PLAY pulls the kick out, SEQ the riser. Toggle: ARP. The keys played melt into the arp phrase at all times. HOME held: a new
  * world. GLO and SCL keep their layers (tempo, root). Called once a pass with the buttons' state */
 static void maku_world_new(void);
 static void maku_buttons(uint32_t pressed, uint32_t notes)
@@ -1114,11 +1114,7 @@ static void maku_buttons(uint32_t pressed, uint32_t notes)
             trk[i].p[P_AMODE] = (int16_t)on;
         ui_message(on ? "ARP ON" : "ARP OFF");
     }
-    if ((pressed >> panel.btn[B_REC]) & 1u) {
-        maku.rec = (uint8_t)!maku.rec;
-        ui_message(maku.rec ? "REC ON" : "REC OFF");
-    }
-    for (k = 0; maku.rec && k < 27u; k++)                 /* (not the kick's grid: its keys are steps) */
+    for (k = 0; k < 27u; k++)                             /* the keys always melt into the field (not the kick's grid: its keys are steps) */
         if (((notes >> k) & 1u) && !maku_kick_grid())
             maku_pick(kb_map(TSEL, k));
 }

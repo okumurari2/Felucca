@@ -1176,9 +1176,10 @@ static void maku_setup(void)
     maku_macro_set(MAKU_ARP, 0, 0);
     song.g[G_BPM] = 72;
     maku.on = 1;
-    maku.rec = maku.riser = 0;
+    maku.riser = 0;
     maku.rise_q = 0;
-    maku.pk_n = maku.pk_av = 0;
+    memset(maku.pk_w, 0, sizeof maku.pk_w);
+    maku.pk_av = 0;
     maku.dens = 0;
     maku.run_left = 0;
     maku.frame_on = 0;

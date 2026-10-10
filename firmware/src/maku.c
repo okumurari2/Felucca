@@ -27,6 +27,7 @@
 #define MAKU_ARP_GAP 24u         /* arp steps 24..28 are silent: the breath */
 #define MAKU_REST 255u
 #define MAKU_TABLE 32u
+#define MAKU_PK 8u               /* the played notes the field remembers; a new one pushes out the weakest (the oldest) */
 
 static struct {
     uint8_t on;
@@ -36,8 +37,8 @@ static struct {
     uint8_t cyc_a, cyc_b;        /* drone cycles done: the chord note rotates with them */
     uint16_t rise_q;             /* SEQ held: the riser, Q8 of density added on top (0 .. 80) */
     uint8_t riser;               /* SEQ is down */
-    uint8_t rec;                 /* REC is on: played notes are picked up by the arp phrase */
-    uint8_t pk[4], pk_n, pk_av;  /* the last notes played (ring of 4); bit i of pk_av: pk[i] is outside the scale */
+    uint8_t pk[MAKU_PK], pk_w[MAKU_PK], pk_av;  /* the notes played, always melting into the arp phrase: pk_w the strength of each
+                                  * (255 new, 0 gone; it fades), bit i of pk_av: pk[i] is outside the scale */
     uint8_t open;                /* DRONE: OPEN 0..127: how many voices of the chord and how wide */
     uint8_t loose;               /* ARP: LOOSE 0..127: how much the phrase unravels and climbs */
     uint8_t m[4][3];             /* the macro of each track's SELECT / PRESETS / ALGORITHM, 0..127 */
@@ -293,13 +294,17 @@ static uint32_t maku_eff(void)
     return d > 127u ? 127u : d;
 }
 
-/* a note played on the keys while REC is on (the scale's mask of the arp's track says if it is an avoid note) */
+/* a note played on the keys (the scale's mask of the arp's track says if it is an avoid note). It takes the place of the weakest
+ * one remembered, which is the oldest: what was played first is pushed out first */
 static void maku_pick(uint32_t note)
 {
-    uint32_t m = scale_mask(&trk[MAKU_ARP]), i = maku.pk_n & 3u;
-    maku.pk[i] = (uint8_t)note;
-    maku.pk_av = (uint8_t)((maku.pk_av & ~(1u << i)) | ((((m >> ((note + 120u - (uint32_t)trk[MAKU_ARP].p[P_ROOT]) % 12u)) & 1u) ? 0u : 1u) << i));
-    maku.pk_n++;
+    uint32_t m = scale_mask(&trk[MAKU_ARP]), i, w = 0;
+    for (i = 1; i < MAKU_PK; i++)
+        if (maku.pk_w[i] < maku.pk_w[w])
+            w = i;
+    maku.pk[w] = (uint8_t)note;
+    maku.pk_w[w] = 255u;
+    maku.pk_av = (uint8_t)((maku.pk_av & ~(1u << w)) | ((((m >> ((note + 120u - (uint32_t)trk[MAKU_ARP].p[P_ROOT]) % 12u)) & 1u) ? 0u : 1u) << w));
 }
 
 /* the step track i plays at idx, in place of its stored one. 0 = rest */
@@ -398,13 +403,27 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             maku.pos = (uint8_t)(rng() % MAKU_TABLE);
             maku.run_left = (uint8_t)(3u + rng() % (6u - d / 32u));
         }
-        if (maku.rec && maku.pk_n && (uint32_t)(rng() % 100u) < 35u) {   /* REC: the field picks up what was played; */
-            uint32_t j = rng() % (maku.pk_n < 4u ? maku.pk_n : 4u);       /* an avoid note is taken less often */
-            if (!((maku.pk_av >> j) & 1u) || (uint32_t)(rng() % 100u) < 35u) {
-                out->n = 1;
-                out->note[0] = maku.pk[j];
-                out->vel = (uint8_t)(52u + rng() % 20u);
-                return 1;
+        if ((uint32_t)(rng() % 100u) < 35u) {       /* what was played melts into the phrase: a note still remembered is taken as often */
+            uint32_t j = 0, k, live = 0, pick, take;      /* as it is strong, and every try fades them all; an avoid note is taken less often */
+            for (k = 0; k < MAKU_PK; k++)
+                live += maku.pk_w[k] != 0;
+            if (live) {
+                pick = rng() % live;
+                for (k = 0; k < MAKU_PK; k++)
+                    if (maku.pk_w[k] && !pick--) {
+                        j = k;
+                        break;
+                    }
+                take = (uint32_t)(rng() % 255u) < maku.pk_w[j] && (!((maku.pk_av >> j) & 1u) || (uint32_t)(rng() % 100u) < 35u);
+                for (k = 0; k < MAKU_PK; k++)
+                    if (maku.pk_w[k])
+                        maku.pk_w[k] = (uint8_t)(maku.pk_w[k] - 1u - maku.pk_w[k] / 24u);
+                if (take) {
+                    out->n = 1;
+                    out->note[0] = maku.pk[j];
+                    out->vel = (uint8_t)(52u + rng() % 20u);
+                    return 1;
+                }
             }
         }
         maku.run_left--;
@@ -457,7 +476,7 @@ static void maku_follow(void)
 
 /* OCT+ / OCT- (dir > 0 / < 0): the key moves a fifth up / down the circle of fifths: a sharp more / a flat more. It is a change
  * of key signature, not a transposition: what already plays or was played keeps its pitch, and only the one note the
- * signature changes moves (F to F# from C major to G major). The notes picked by REC are mapped that way at once and an
+ * signature changes moves (F to F# from C major to G major). The notes played (melting into the phrase) are mapped that way at once and an
  * arp run in progress goes on in the old frame (maku_step); what starts after this is built on the new ROOT.
  * The chords already sounding ring on: they are not retuned, the next one is in the new key */
 static void maku_fifth(int dir)
@@ -466,7 +485,7 @@ static void maku_fifth(int dir)
     uint32_t from = (uint32_t)a->p[P_ROOT] % 12u, to = (from + (dir > 0 ? 7u : 5u)) % 12u, mask = scale_mask(a), i;
     if (!maku.on)
         return;
-    for (i = 0; i < 4u && i < maku.pk_n; i++)
+    for (i = 0; i < MAKU_PK; i++)
         maku.pk[i] = (uint8_t)maku_resig(maku.pk[i], mask, from, to);
     if (maku.run_left && !maku.frame_on) {
         maku.frame_root = (uint8_t)from;
@@ -475,7 +494,7 @@ static void maku_fifth(int dir)
     a->p[P_ROOT] = (int16_t)to;
     maku_follow();
     maku.root = (uint8_t)to;
-    for (i = 0; i < 4u && i < maku.pk_n; i++)                      /* (the avoid flags: against the new key) */
+    for (i = 0; i < MAKU_PK; i++)                                  /* (the avoid flags: against the new key) */
         maku.pk_av = (uint8_t)((maku.pk_av & ~(1u << i)) | ((((mask >> ((maku.pk[i] + 120u - to) % 12u)) & 1u) ? 0u : 1u) << i));
 }
 
