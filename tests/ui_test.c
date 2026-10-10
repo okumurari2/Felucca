@@ -3243,7 +3243,7 @@ static int test_quick_layers(void)
     ok = trk[1].p[P_MUTE] == 1 && ui.layer == LAYER_GLO && !gates() && mo_w == mo;
     a = leds_at(0); b2 = leds_at(250);
     ok &= ((a & b2) >> black(0)) & 1u && !(((a | b2) >> black(1)) & 1u);           /* T1 sounding lit, T2 muted dark */
-    ok &= ((a ^ b2) >> white(0)) & 1u && ((a ^ b2) >> white(7)) & 1u && !(((a | b2) >> white(5)) & 1u);
+    ok &= ((a ^ b2) >> white(4)) & 1u && ((a ^ b2) >> white(7)) & 1u && !(((a | b2) >> white(5)) & 1u) && !(((a | b2) >> white(0)) & 1u);   /* (C4: ALL, F4: TAP breathe; F3 .. B3 no more: there is no SOLO) */
     key_up(black(1)); btn_up(B_GLO); frame();
     bad += check("GLO + black key 2: T2 MUTE latched (SET), silent, no MIDI; LEDs: sounding lit, muted dark", ok &&
                  trk[1].p[P_MUTE] == 1 && !ui.layer);
@@ -3256,13 +3256,11 @@ static int test_quick_layers(void)
     bad += check("  again: unmuted; C4: UNMUTE ALL", ok && !trk[2].p[P_MUTE] && !trk[1].p[P_MUTE]);
     lay_combo(B_GLO, white(2));
     perf_begin(CTL);
-    ok = perf_solo == 4u && ((perf_act >> PF_M1) & 15u) == 0xBu;   /* T3 solo: T1 T2 T4 muted */
+    ok = !perf_solo && ((perf_act >> PF_M1) & 15u) == 0u;           /* no SOLO: the others are not muted */
     btn_up(B_GLO); frame();
-    perf_begin(CTL);
-    ok &= perf_solo == 4u && ui.layer == LAYER_GLO;                 /* GLO let go first: the solo stays with its key */
     key_up(white(2)); frame();
     perf_begin(CTL);
-    bad += check("GLO + A3 held: SOLO T3 (the others muted), lasts while the key is held, not P_MUTE",
+    bad += check("GLO + A3 held: no SOLO any more (nothing muted)",
                  ok && !perf_solo && !((perf_act >> PF_M1) & 15u) && !trk[0].p[P_MUTE] && !ui.layer);
     song.g[G_BPM] = 100;
     btn_down(B_GLO); frame();
@@ -3279,13 +3277,13 @@ static int test_quick_layers(void)
         go_title("ENV");
         btn_down(B_GLO); frame();
         turn(EN_K3, -10);
-        ok = trk[2].p[P_LEVEL] == l2 - 10 && TSEL->p[P_ATK] == atk && ui.layer == LAYER_GLO;
+        ok = trk[2].p[P_LEVEL] == l2 && TSEL->p[P_ATK] == atk && ui.layer == LAYER_GLO;   /* (no gain in GLO) */
         key_down(black(0)); frame(); key_up(black(0)); frame();
         ok &= trk[0].p[P_MUTE] == 1 && song.octave == 0;
         oct_back();
         ok &= trk[2].p[P_LEVEL] == l2 && !trk[0].p[P_MUTE] && song.octave == 0 && ui.layer == LAYER_GLO;
         btn_up(B_GLO); frame();
-        bad += check("GLO KNOB 3: T3 LEVEL from any page; OCT-: mutes and levels as it opened, no octave", ok &&
+        bad += check("GLO KNOB 3: no gain, no page edit; OCT-: mutes as they were, no octave", ok &&
                      str_eq(cur_page()->title, "ENV"));
     }
     song.playing = 1; transport_req = 0;
@@ -3425,7 +3423,7 @@ static int test_quick_layers(void)
     /* one layer at a time: a second layer button is ignored, its keys stay notes after */
     ui_power_on();
     btn_down(B_GLO); frame(); btn_down(B_EDIT); frame(); key_down(white(1)); frame();
-    ok = ui.layer == LAYER_GLO && TSEL->eng_req == trk[0].eng_req && perf_solo == 2u;
+    ok = ui.layer == LAYER_GLO && TSEL->eng_req == trk[0].eng_req && perf_solo == 0u;
     key_up(white(1)); btn_up(B_GLO); frame();
     key_down(white(1)); frame();
     ok &= gates() > 0 && !ui.layer;
@@ -4544,7 +4542,7 @@ static int test_breath(void)
     for (i = 0; i < 4u; i++)
         for (lk = 0; lk < 2u; lk++)
             for (m = 0; m < 4u; m++) {
-                uint32_t br0 = 0, lit0 = 0, want_br, want_lit, hk = LL[i] == LAYER_GLO ? white(1) : white(2);
+                uint32_t br0 = 0, lit0 = 0, want_br, want_lit, hk = LL[i] == LAYER_GLO ? white(4) : white(2);
                 ui_power_on();
                 settings_leds = MODES[m];
                 go_title("ENV"); frame();
@@ -4557,7 +4555,7 @@ static int test_breath(void)
                 key_down(hk); frame();
                 okl &= ui.layer == LL[i];
                 want_lit = layer_leds(&want_br);
-                held = LL[i] == LAYER_FX || LL[i] == LAYER_GLO;  /* (HOLD keys: lit while held) */
+                held = LL[i] == LAYER_FX;                    /* (HOLD keys: lit while held; GLO's keys are ALL, TAP and the mutes) */
                 for (t = 0; t < 8u; t++) {                  /* 0 .. 1.75 s: the same picture */
                     fm1_ms += 250u;
                     ui_leds();
@@ -5409,7 +5407,7 @@ static int test_layer_knob_race(void)
                     if (LL[l] == LAYER_FX)                  /* the layer's own control moved */
                         ok &= a1.k[k] == 3;
                     else if (LL[l] == LAYER_GLO)
-                        ok &= a1.p[k][P_LEVEL] == lk_p[k][P_LEVEL] - 3;
+                        ok &= a1.p[k][P_LEVEL] == lk_p[k][P_LEVEL];   /* (no gain here) */
                     else if (LL[l] == LAYER_SCL)
                         ok &= a1.p[0][LY_SCL.id[k]] != lk_p[0][LY_SCL.id[k]];
                     else if (k < 2u)                        /* (EDIT KNOB 3 FAV: a mark, KNOB 4 nothing) */
@@ -5842,11 +5840,11 @@ static int test_layer_lock(void)
         key_down(black(1)); frame(); key_up(black(1)); frame();
         ok = trk[1].p[P_MUTE] == 1 && !gates() && mo_w == mo;
         turn(EN_K1, 3);
-        ok &= trk[0].p[P_LEVEL] == l0 + 3 && str_eq(cur_page()->title, "ENV");
+        ok &= trk[0].p[P_LEVEL] == l0 && str_eq(cur_page()->title, "ENV");   /* (no gain) */
         press(B_OCTDN);                                 /* OCT-: the mix put back, still locked */
         ok &= !trk[1].p[P_MUTE] && trk[0].p[P_LEVEL] == l0 && msg_is("MIX PUT BACK") && ui.lock == LAYER_GLO;
     }
-    bad += check("  GLO locked: a black key mutes (silent, no MIDI), KNOB 1 T1 LEVEL, OCT- puts back, still locked", ok);
+    bad += check("  GLO locked: a black key mutes (silent, no MIDI), KNOB 1 no gain, OCT- puts back, still locked", ok);
     ui_power_on();
     go_title("ENV"); frame();
     press(B_FX); press(B_FX); frames(100);
@@ -6473,17 +6471,7 @@ static int test_knob_accel(void)
         ok = got[0] >= 35 && got[0] <= 60 && got[1] == 12 && got[2] == 12 && got[3] == 0;
         ui_power_on(); ui_prefs = PREF_ACCEL;
         go_home(); frames(64);
-        trk[1].p[P_LEVEL] = 0;
-        btn_down(B_GLO); frames(560);
-        for (k = 0; k < 12u; k++) {
-            host_enc[panel.enc[EN_K2]] += panel.dir[EN_K2];
-            fm1_ms -= 6u;
-            frame();
-        }
-        g = trk[1].p[P_LEVEL];
-        btn_up(B_GLO); frames(400);
-        ok &= g > 12 + 12;
-        bad += check("#126 KNOB ACCEL on the FX layer (FILTER: a 12-detent flick >= 35, OFF 12, slow 12) and GLO LEVEL", ok);
+        bad += check("#126 KNOB ACCEL on the FX layer (FILTER: a 12-detent flick >= 35, OFF 12, slow 12)", ok);
     }
     {   /* saved with the settings; settings from before it: OFF */
         persist_t p;

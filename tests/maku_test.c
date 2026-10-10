@@ -519,40 +519,34 @@ static int buttons(void)
     start(0);
     ui.home = 1; ui.menu = 0; ui.confirm = 0;
     down_for(B_FX, 3);
-    bad += check("BUTTONS: FX held: FREEZE, and no layer opens", (perf_held & PF_BIT(PF_FRZ)) && !ui.layer && !(kb_mask & (1u << panel.btn[B_FX])));
+    bad += check("BUTTONS: FX held: FOG, no layer opens, the master's low-pass closes", (maku.hv & VBIT(VB_FOG)) && maku.verb == VB_FOG && !ui.layer &&
+                 !(kb_mask & (1u << panel.btn[B_FX])) && perf_k[0] < 0);
+    turn(EN_SELECT, 5);
+    bad += check("  .. SELECT is its WASH (the macros stay)", maku.vp[VB_FOG][0] == 95 && maku.m[0][0] == 40u);
     let_go(B_FX);
-    bad += check("  let go: it is off", !(perf_held & PF_BIT(PF_FRZ)));
-    down_for(B_ENV, 3);
+    bad += check("  let go: it is off", !maku.hv && maku.verb == VB_NONE && perf_k[0] == 0);
     down_for(B_SAVE, 3);
-    bad += check("  ENV: tape stop, SAVE: repeat, together", (perf_held & PF_BIT(PF_TAPE)) && (perf_held & PF_BIT(PF_R16)));
-    let_go(B_ENV);
+    down_for(B_ARP, 3);
+    bad += check("  SAVE: KEEP, ARP: CASCADE, together; the last pressed has the screen", (maku.hv & VBIT(VB_KEEP)) && (maku.hv & VBIT(VB_CASC)) && maku.verb == VB_CASC);
+    let_go(B_ARP);
+    bad += check("  .. one let go: the other has it", maku.verb == VB_KEEP);
     let_go(B_SAVE);
-    down_for(B_EDIT, 3);
-    bad += check("  EDIT: harmonizer and its shimmer", (perf_held & PF_BIT(PF_OUP)) && perf_k[3] == 60);
-    let_go(B_EDIT);
-    bad += check("  .. off again", !(perf_held & PF_BIT(PF_OUP)) && perf_k[3] == 0);
-    down_for(B_PLAY, 3);
-    bad += check("  PLAY held: the kick is muted, and the transport does not start", (perf_held & PF_BIT(PF_M1)) && !transport_req);
-    let_go(B_PLAY);
-    bad += check("  .. and back", !(perf_held & PF_BIT(PF_M1)));
-    down_for(B_LFO, 3);
-    bad += check("  LFO: filter sweep, and no page opens", (perf_held & PF_BIT(PF_LPF)) && ui.home);
-    let_go(B_LFO);
     down_for(B_SEQ, 3);
-    for (i = 0; i < 7000u; i++)
-        maku_block();
-    bad += check("  SEQ held: the riser climbs to +80", maku.riser && maku_eff() == 80u);
+    bad += check("  SEQ: SCRAMBLE (no riser any more)", maku.verb == VB_SCRAM && maku_eff() == maku.dens);
     let_go(B_SEQ);
-    for (i = 0; i < 600u; i++)
-        maku_block();
-    bad += check("  .. and falls when let go", maku_eff() == 0u);
-    let_go(B_ARP);
-    down_for(B_ARP, 3);
-    let_go(B_ARP);
-    bad += check("  ARP toggles every track's arp", trk[0].p[P_AMODE] == 1 && trk[3].p[P_AMODE] == 1);
-    down_for(B_ARP, 3);
-    let_go(B_ARP);
-    bad += check("  .. and off", trk[0].p[P_AMODE] == 0);
+    down_for(B_EDIT, 3);
+    bad += check("  EDIT: TWIST", maku.verb == VB_TWIST && !(perf_held & PF_BIT(PF_OUP)));
+    let_go(B_EDIT);
+    down_for(B_ENV, 3);
+    bad += check("  ENV: SWELL, no layer, no page, no old tape stop", maku.verb == VB_SWELL && !perf_held && !ui.layer && ui.home);
+    let_go(B_ENV);
+    down_for(B_LFO, 3);
+    bad += check("  LFO: WOBBLE, no old filter sweep", maku.verb == VB_WOB && !perf_held && !ui.layer && ui.home);
+    let_go(B_LFO);
+    down_for(B_PLAY, 3);
+    bad += check("  PLAY held: the BREAK, and the transport does not start", maku.brk && maku.verb == VB_PLAY && !transport_req);
+    let_go(B_PLAY);
+    bad += check("  .. and back", !maku.brk && !maku.hv);
     down_for(B_REC, 3);
     let_go(B_REC);
     bad += check("  REC does nothing here (it arms no recording)", song.rec == 0u);
@@ -668,6 +662,275 @@ static int fifths(void)
             ok &= in_scale(hits[3][i].note, 7u, 1u) != 0;
         bad += check("  .. and all the arp's notes after it are in G major", ok && !maku.frame_on);
     }
+    return bad;
+}
+
+/* the verbs that hold three parameters: PLAY (SINK WASH HUSH), GLO (BPM SWING DUCK), SCL (ROOT SCALE REG); SCL tapped goes on through the scales */
+static int verbs(void)
+{
+    int bad = 0;
+    uint32_t i, ok = 1, n;
+    int32_t bpm;
+    start(0);
+    ui.home = 1; ui.menu = 0; ui.confirm = 0;
+    for (i = 0; i < NTRK; i++)
+        trk[i].p[P_SCALE] = 1;                          /* MAJ */
+    maku_block();
+    for (n = 0; n < 8u; n++) {                          /* eight taps: MAJ MIN LYD DOR MIX PHRY PEN MPEN, then MAJ again */
+        static const uint8_t WANT[8] = {2, 9, 3, 4, 8, 5, 6, 1};
+        down_for(B_SCL, 3);
+        let_go(B_SCL);
+        ok &= trk[1].p[P_SCALE] == WANT[n] && trk[0].p[P_SCALE] == WANT[n] && trk[3].p[P_SCALE] == WANT[n];
+    }
+    bad += check("VERBS: SCL tapped: the scale goes on, major and minor in turn, on all four tracks; eight taps come home", ok);
+    for (i = 0; i < NTRK; i++)
+        trk[i].p[P_SCALE] = 7;                          /* HARM: not on the list */
+    maku_block();
+    down_for(B_SCL, 3);
+    let_go(B_SCL);
+    bad += check("  a scale off the list starts it over at MAJ", trk[1].p[P_SCALE] == 1 && !ui.layer);
+    down_for(B_SCL, 3);
+    turn(EN_SELECT, 2);                                 /* SCL held, a knob turned: the layer opens, ROOT moves */
+    bad += check("  SCL held: SELECT moves the ROOT, and the key reaches all four tracks", trk[1].p[P_ROOT] == 2 && ui.layer == LAYER_SCL && maku_verb_now() == VB_ROOT);
+    turn(EN_PRESET, 1);
+    bad += check("  .. PRESETS the scale along the list (MAJ -> MIN)", trk[1].p[P_SCALE] == 2 && trk[2].p[P_SCALE] == 2);
+    turn(EN_ALGO, -1);
+    bad += check("  .. ALGORITHM the drones' register (MID -> LOW): the drone chord is an octave lower", maku.vp[VB_ROOT][2] == 0 && maku_low(36u) == 24u);
+    turn(EN_K2, 5);
+    bad += check("  .. KNOB 1..4 do nothing in it", trk[1].p[P_LEVEL] == (int16_t)90);
+    let_go(B_SCL);
+    maku.vp[VB_ROOT][2] = 1;
+
+    bpm = song.g[G_BPM];
+    i = (uint32_t)trk[2].p[P_LEVEL];
+    down_for(B_GLO, 3);
+    turn(EN_SELECT, 3);
+    bad += check("  GLO held: SELECT is the tempo, as before", song.g[G_BPM] == bpm + 3 && maku_verb_now() == VB_GLO);
+    turn(EN_PRESET, 10);
+    turn(EN_ALGO, -4);
+    bad += check("  .. PRESETS the arp's SWING, ALGORITHM the DUCK depth (64 = as designed)", maku.vp[VB_GLO][1] == 10 && maku.vp[VB_GLO][2] == 60 &&
+                 trk[MAKU_ARP].p[P_SSWING] == 10 * 40 / 127);
+    turn(EN_K3, 7);
+    bad += check("  .. and the knobs give no gain: the volumes stay where they were", (uint32_t)trk[2].p[P_LEVEL] == i);
+    let_go(B_GLO);
+    bad += check("  GLO has no solo: the keys solo nothing", perf_solo == 0u);
+
+    start(0);
+    ui.home = 1; ui.menu = 0; ui.confirm = 0;
+    down_for(B_PLAY, 3);
+    turn(EN_SELECT, -20);
+    turn(EN_PRESET, -27);
+    turn(EN_ALGO, -63);
+    bad += check("  PLAY held: SELECT the SINK, PRESETS the WASH, ALGORITHM the HUSH; the macros stay",
+                 maku.vp[VB_PLAY][0] == 80 && maku.vp[VB_PLAY][1] == 100 && maku.vp[VB_PLAY][2] == 64 && maku.m[0][1] == 40u);
+    for (n = 0; n < 3000u; n++)
+        maku_block();
+    bad += check("  held: the dive reaches WASH's share, the reverb's pull SINK's, and the kick stops at HUSH's half",
+                 maku_dive() == 4096 * 100 / 127 && maku_sink() == 4096 * 80 / 127 && maku_gain(0) > 2000 && maku_gain(0) < 2100);
+    let_go(B_PLAY);
+    start(0);
+    maku.brk = 1;
+    for (n = 0; n < 3000u; n++)
+        maku_block();
+    maku.brk = 0;
+    bad += check("  at the defaults PLAY is the BREAK as it was, and SINK is on top of it", maku_dive() == 4096 && maku_gain(0) == 0 && maku_sink() == 4096 * 100 / 127);
+    for (n = 0; n < 5000u; n++)
+        maku_block();
+    bad += check("  let go: the pull on the reverb lifts too", maku_sink() == 0);
+    {   /* the reverb's tail rings longer with SINK: an impulse into the room, the energy after a second */
+        int32_t in[CTL], out[CTL], tail[2];
+        uint32_t b, pass;
+        for (pass = 0; pass < 2u; pass++) {
+            int64_t e = 0;
+            memset(&fx, 0, sizeof fx);
+            rev_clear();
+            maku.dive = pass ? 4096 : 0;
+            for (b = 0; b < 400u; b++) {
+                uint32_t j;
+                for (j = 0; j < CTL; j++)
+                    in[j] = b == 0u && j == 0u ? 20000 : 0, out[j] = 0;
+                wet_r[0] = 0;
+                rev_room(in, out, CTL);
+                if (b >= 300u)
+                    for (j = 0; j < CTL; j++)
+                        e += (int64_t)out[j] * out[j] >> 8;
+            }
+            tail[pass] = (int32_t)(e >> 8);
+        }
+        bad += check("  SINK: the room's tail is longer (over twice) while PLAY is held", tail[1] > 2 * tail[0]);
+    }
+    return bad;
+}
+
+/* the five verbs that change the music while held (docs/AMBIENT.md): KEEP, SCRAMBLE, CASCADE, FOG, TWIST */
+static int verbs2(void)
+{
+    int bad = 0;
+    uint32_t i, ok, a0, a1, d0;
+    int32_t c, d, r, l0;
+    uint8_t m0;
+    /* KEEP: the arp loops its last LEN steps, the drones keep their chord */
+    start(100);
+    sim(16 * 8);
+    maku.hv = VBIT(VB_KEEP);
+    maku.vp[VB_KEEP][0] = 0;                            /* LEN 2 */
+    memset(nhits, 0, sizeof nhits);
+    sim(16 * 8);
+    {
+        uint8_t seen[8];
+        uint32_t ns = 0, j;
+        for (i = 0; i < nhits[3]; i++) {
+            for (j = 0; j < ns && seen[j] != hits[3][i].note; j++)
+                ;
+            if (j == ns && ns < 8u)
+                seen[ns++] = hits[3][i].note;
+        }
+        bad += check("KEEP held: the arp plays at most the two notes of its loop", nhits[3] > 4u && ns <= 2u);
+    }
+    maku.hv = 0;
+    memset(nhits, 0, sizeof nhits);
+    sim(16 * 8);
+    {
+        uint8_t seen[64];
+        uint32_t ns = 0, j;
+        for (i = 0; i < nhits[3]; i++) {
+            for (j = 0; j < ns && seen[j] != hits[3][i].note; j++)
+                ;
+            if (j == ns && ns < 64u)
+                seen[ns++] = hits[3][i].note;
+        }
+        bad += check("  let go: it runs on through the table again (more than two notes)", ns > 2u);
+    }
+    {   /* the drone's chords as it plays them: the notes of each step, summed to one signature */
+        uint32_t sig[24], ns, j, k;
+        for (k = 0; k < 2u; k++) {
+            start(60);
+            maku.hv = k ? VBIT(VB_KEEP) : 0u;
+            for (i = 0, ns = 0; i < 24u; i++) {
+                step_t st;
+                uint32_t sg = 0;
+                memset(&st, 0, sizeof st);
+                maku_step(MAKU_DRA, (i % 3u) * 19u, &st);
+                for (j = 0; j < st.n; j++)
+                    sg = sg * 131u + st.note[j];
+                if (i >= 3u)
+                    sig[ns++] = sg;
+            }
+            for (j = 1, ok = 0; j < ns; j++)
+                ok |= sig[j] != sig[0];
+            bad += check(k ? "  the drone's chord stays while it is held (HOLD 127)" : "  and without it the chords move on", k ? !ok : ok);
+        }
+        maku.hv = 0;
+    }
+
+    /* SCRAMBLE: the kick gets ghosts even at DENSITY 0; the arp's jumps and re-rolls rise */
+    start(0);
+    memset(nhits, 0, sizeof nhits);
+    sim(64);
+    a0 = nhits[0];
+    maku.hv = VBIT(VB_SCRAM);
+    maku.vp[VB_SCRAM][1] = 127;
+    memset(nhits, 0, sizeof nhits);
+    sim(64);
+    bad += check("SCRAMBLE held: ghost kicks where DENSITY 0 has none", a0 == 0u && nhits[0] > 5u);
+    maku.va[VB_SCRAM] = 4096;
+    maku_apply();
+    maku.vp[VB_SCRAM][2] = 127;
+    maku_apply();
+    bad += check("  its SWING adds to the arp's", trk[MAKU_ARP].p[P_SSWING] >= 40);
+    maku.hv = 0;
+    maku.va[VB_SCRAM] = 0;
+
+    /* CASCADE: every step plays, the breath too, octaves stacked */
+    start(60);
+    memset(nhits, 0, sizeof nhits);
+    sim(29 * 8);
+    a0 = nhits[3];
+    maku.hv = VBIT(VB_CASC);
+    maku.vp[VB_CASC][0] = 127;
+    maku.vp[VB_CASC][1] = 127;
+    memset(nhits, 0, sizeof nhits);
+    sim(29 * 8);
+    for (i = 0, ok = 0; i < nhits[3]; i++)
+        ok |= hits[3][i].step >= MAKU_ARP_GAP;
+    {
+        uint32_t tries;
+        for (tries = 0, a1 = 0; tries < 60u && a1 != 3u; tries++) {   /* (a rest or a skipped step plays nothing: ask again) */
+            step_t st;
+            memset(&st, 0, sizeof st);
+            a1 = maku_step(MAKU_ARP, 3, &st) ? st.n : 0u;
+        }
+    }
+    bad += check("CASCADE held: the arp plays much more, in its breath too, and stacks octaves (SPAN)", nhits[3] > a0 * 3u / 2u && ok && a1 == 3u);
+    maku.hv = 0;
+
+    /* FOG: the sends of everything but the kick rise */
+    start(0);
+    maku.va[VB_FOG] = 4096;
+    c = d = r = 0;
+    maku_boost(MAKU_DRB, &c, &d, &r);
+    bad += check("FOG: the haze's chorus, delay and reverb sends rise", c > 10000 && d > 10000 && r > 15000);
+    c = d = r = 0;
+    maku_boost(MAKU_KICK, &c, &d, &r);
+    bad += check("  the kick's do not", !c && !d && !r);
+    maku.vp[VB_FOG][0] = 0;
+    c = d = r = 0;
+    maku_boost(MAKU_DRB, &c, &d, &r);
+    bad += check("  WASH 0: no reverb or delay", !d && !r && c > 0);
+    maku.va[VB_FOG] = 0;
+    maku.va[VB_KEEP] = 4096;
+    d = 0; c = r = 0;
+    maku_boost(MAKU_ARP, &c, &d, &r);
+    bad += check("  KEEP's ECHO sends only the arp into the delay", d > 10000);
+    d = 0;
+    maku_boost(MAKU_DRA, &c, &d, &r);
+    maku.va[VB_KEEP] = 0;
+    bad += check("  .. not the drone", d == 0);
+
+    /* TWIST: every track's macros further on while held, back when let go; the knob values stay */
+    start(0);
+    l0 = trk[2].p[P_E7];
+    m0 = maku.m[2][1];
+    maku.hv = VBIT(VB_TWIST);
+    for (i = 0; i < 400u; i++)
+        maku_block();
+    d0 = (uint32_t)trk[2].p[P_E7];
+    bad += check("TWIST held: TONE of every track moves up, the macro's own value stays", (int32_t)d0 > l0 && maku.m[2][1] == m0);
+    maku.hv = 0;
+    for (i = 0; i < 900u; i++)
+        maku_block();
+    bad += check("  let go: all back", trk[2].p[P_E7] == l0 && !maku.tw_q);
+    /* SWELL and WOBBLE: attack and release longer, the filter LFO faster and deeper, put back when let go; a macro written meanwhile is the new base */
+    start(0);
+    {
+        int16_t a0 = trk[2].p[P_ATK], r0 = trk[2].p[P_REL], lr = trk[1].p[P_LRATE], ld = trk[1].p[P_LD_FLT], k0 = trk[0].p[P_ATK];
+        maku.hv = VBIT(VB_SWELL) | VBIT(VB_WOB);
+        for (i = 0; i < 400u; i++)
+            maku_block();
+        bad += check("SWELL held: the attack and release of the three voices are longer (not the kick's)", trk[2].p[P_ATK] > a0 && trk[2].p[P_REL] > r0 && trk[1].p[P_ATK] > 10 && trk[0].p[P_ATK] == k0);
+        bad += check("WOBBLE held: the drone's filter LFO faster and deeper", trk[1].p[P_LRATE] > lr && trk[1].p[P_LD_FLT] > ld);
+        maku_macro_set(2, 2, 100);                      /* AIR moves the shimmer's attack while SWELL is on */
+        for (i = 0; i < 4u; i++)
+            maku_block();
+        maku.hv = 0;
+        for (i = 0; i < 900u; i++)
+            maku_block();
+        bad += check("  let go: all back where they were; AIR's new attack stays", trk[1].p[P_LRATE] == lr && trk[1].p[P_LD_FLT] == ld && trk[3].p[P_REL] > 0 &&
+                     trk[2].p[P_ATK] != a0 && trk[2].p[P_ATK] == 60 + ((127 - 60) * 100 + 63) / 127 && !maku.ovlive);
+        (void)r0;
+    }
+    maku.va[VB_SWELL] = 4096;
+    maku.vp[VB_SWELL][2] = 127;
+    bad += check("  REV: the reverse swell is full", maku_swell_rvs(0) == 100);
+    maku.va[VB_SWELL] = 0;
+    maku.va[VB_WOB] = 4096;
+    c = d = r = 0;
+    maku_boost(MAKU_DRA, &c, &d, &r);
+    bad += check("WOBBLE: CHORUS sends the voices into the chorus, not the kick", c > 10000 && !d && !r);
+    c = 0;
+    maku_boost(MAKU_KICK, &c, &d, &r);
+    bad += check("  the kick's chorus stays", c == 0);
+    maku.va[VB_WOB] = 0;
     return bad;
 }
 
@@ -904,7 +1167,7 @@ static int bench(void)
 
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + melt() + fifths() + screen() + worlds_voices() + catalog() + (getenv("MAKU_BENCH") ? bench() : 0);
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + melt() + fifths() + verbs() + verbs2() + screen() + worlds_voices() + catalog() + (getenv("MAKU_BENCH") ? bench() : 0);
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }

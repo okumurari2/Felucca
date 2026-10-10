@@ -1306,7 +1306,8 @@ static void ui_draw_page(uint32_t counting)
         name_draw();
         return;
     }
-    if (ui.layer) {                                     /* a layer's map over the page (ui_layer.c) */
+    if (ui.layer && !(maku_knobs_on() && (ui.layer == LAYER_GLO || ui.layer == LAYER_SCL))) {   /* a layer's map over the page (ui_layer.c); MAKU's GLO and
+                                                         * ROOT show their three parameters in its quadrants instead */
         if (ui.force)
             draw_frame();
         draw_head();

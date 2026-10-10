@@ -496,7 +496,7 @@ EXPORT int32_t *web_snapshot(void)
     o[k++] = maku.loose;
     o[k++] = song.sel;                          /* the focused track */
     o[k++] = (int32_t)perf_held;                /* the effects held now (PF_*) */
-    o[k++] = (int32_t)(maku.brk | maku.riser << 1);
+    o[k++] = (int32_t)maku.hv;                  /* the verbs held now (bit VB_*: maku.c) */
     o[k++] = (int32_t)(fm1_ms - web_world_ms);  /* ms since this world began */
     o[k++] = 0;
     for (i = 0; i < 4u; i++)
