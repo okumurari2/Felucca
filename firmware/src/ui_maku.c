@@ -1,7 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only
  * Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments */
 /* AMBIENT.md: the screen while MAKU is on, 240 x 240 in four 119 x 119 quadrants, laid out like the knobs:
- *   top left      the waveform, BPM, the four tracks' volumes (KNOB 1..4 left to right), the focus
+ *   top left      the key (ROOT and SCALE, always: OCT- / OCT+ move it), the waveform, BPM, the four tracks' volumes
+ *                 (KNOB 1..4 left to right), the focus
  *   top right     SELECT's macro of the focused track (DENSITY: the kick's 16 steps too)
  *   bottom left   PRESETS' macro
  *   bottom right  ALGORITHM's macro
@@ -66,7 +67,7 @@ static void mq_top_left(void)
 {
     char b[8];
     uint32_t i, f = song.sel < 4u ? song.sel : 0u;
-    int32_t peak = 1500, x, py, cy = 22, a = 16;
+    int32_t peak = 1500, x, py, cy = 34, a = 10;
     static int16_t snap[SCOPE_N];
     uint32_t w = scope_w, trig = 0;
     for (i = 0; i < SCOPE_N; i++) {
@@ -89,6 +90,14 @@ static void mq_top_left(void)
         if (x)
             cv_line_t(x - 1, py, x, y, mk_col(f), 2);
         py = y;
+    }
+    {                                                   /* the key, whatever else the screen shows (the message has its own line) */
+        char k[16];
+        str_cpy(k, N_NOTE[(uint32_t)trk[MAKU_DRA].p[P_ROOT] % 12u], sizeof k);
+        str_cpy(k + str_len(k), " ", sizeof k - str_len(k));
+        str_cpy(k + str_len(k), N_SCALE[clamp(trk[MAKU_DRA].p[P_SCALE], 0, (int32_t)(sizeof N_SCALE / sizeof N_SCALE[0]) - 1)],
+                sizeof k - str_len(k));
+        cv_text(6, 4, &AF_M, k, T_TEXT);
     }
     fmt_int(b, song.g[G_BPM]);
     {
