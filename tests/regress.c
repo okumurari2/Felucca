@@ -324,7 +324,7 @@ static uint64_t instr_now(void)
 }
 /* MAKU (maku.c) at DENSITY 127: the kick, two drones and the arp played by the sequencer inside mix_block (events_block),
  * the voices it really starts; the cost of the whole interlude mode, ducking included */
-static void job_cpu_maku(void)
+static void job_cpu_maku(int ins)
 {
     static const uint8_t ROLE[NPART][4] = {{ENGI_DRUM, 0, 16, 0}, {ENGI_PHYS, 7, MAKU_DRA_LEN, 0}, {8, 0, MAKU_DRB_LEN, 0}, {ENGI_PHYS, 4, MAKU_ARP_LEN, 0}};
     uint32_t p, k, nb = FS / CTL;
@@ -341,6 +341,14 @@ static void job_cpu_maku(void)
             trk[p].p[P_REL] = 120;
         }
     }
+    if (ins)                                            /* the worst of the INSERT: PHASR on both drones, MIX 100 % (maku_world) */
+        for (p = MAKU_DRA; p <= MAKU_DRB; p++) {
+            trk[p].p[P_ITYPE] = IT_PHASER;
+            trk[p].p[P_IA] = 40;
+            trk[p].p[P_IB] = 120;
+            trk[p].p[P_IC] = 80;
+            trk[p].p[P_IMIX] = 127;
+        }
     song.g[G_BPM] = 72;
     maku.on = 1;
     maku_set_density(127);
@@ -363,8 +371,8 @@ static void job_cpu(const job_t *j)
     const uint8_t (*parts)[3] = j->parts;
     uint32_t p, i, k, nb = FS / CTL, drums_on = parts[3][2] == DRUM_HITS;
     uint64_t i0, t0;
-    if (j->e == 0xFD) {
-        job_cpu_maku();
+    if (j->e == 0xFD || j->e == 0xFC) {
+        job_cpu_maku(j->e == 0xFC);
         return;
     }
     host_tracks_init();
@@ -1166,6 +1174,12 @@ int main(int argc, char **argv)
         j->parts = (const uint8_t (*)[3])cpu_parts[ncpu++];
         j->e = 0xFD;
     }
+    {   /* the same with the INSERT on both drones (PHASR, MIX 100 %): what it adds to the interlude mode */
+        job_t *j = add(J_CPU, "cpu/mix/maku_127_insert");
+        memset(cpu_parts[ncpu], 0, sizeof cpu_parts[ncpu]);
+        j->parts = (const uint8_t (*)[3])cpu_parts[ncpu++];
+        j->e = 0xFC;
+    }
     {   /* mixes: idle (subtracted from the presets' counts), idle + drums (part 4 DRUM; SAMPLE PERC until 1.0.2), FM (DIGITAL with
          * FELUCCA_FM4, else FM6) + PHASE + VOICE asking 8 + 8 + 4 + the drums (the budget keeps 8; FM6 plays 6) */
         job_t *j = add(J_CPU, "cpu/mix/idle");
@@ -1334,7 +1348,7 @@ int main(int argc, char **argv)
         if (eng_ok(e))
             printf("regress:   %-8s %-14s %6.0f instr  %6.1f ns\n", ENGINES[e]->name, ENGINES[e]->presets[heavy_p[e]].name,
                    heavy[e], heavy_ns[e]);
-    for (i = c1 - 4u; i < c1; i++)
+    for (i = c1 - 6u; i < c1; i++)       /* (the mixes: MAKU at DENSITY 127 without and with the INSERT, then the idle ones) */
         printf("regress:   %-23s %6.0f instr  %6.1f ns\n", J[i].name + 8, J[i].r.ipc, J[i].r.ns);
 
     printf("regress: %u golden renders (%u changed, %u gone), %u health failures, %u voice / routing checks failed, "

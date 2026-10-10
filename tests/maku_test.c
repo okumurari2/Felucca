@@ -581,9 +581,15 @@ static int worlds_voices(void)
     int32_t o[2u * CTL];
     uint32_t b, i, k, nb = 6u * BAR_STEPS * step_blocks(), act, steals = 0, seed, maxact = 0, presets_seen = 0;
     uint8_t seen[3][16] = {{0}};
+    uint32_t ins_worlds = 0, ins_none = 0, ins_sounding = 0, ins_wrong = 0;
     for (seed = 1; seed <= 12u; seed++) {
         start(127);
         maku_world(seed * 7919u);
+        ins_wrong += trk[MAKU_KICK].p[P_ITYPE] != IT_OFF || trk[MAKU_ARP].p[P_ITYPE] != IT_OFF ||
+                     !(trk[MAKU_DRA].p[P_ITYPE] == IT_PHASER || trk[MAKU_DRA].p[P_ITYPE] == IT_CHORUS || trk[MAKU_DRA].p[P_ITYPE] == IT_OFF) ||
+                     !(trk[MAKU_DRB].p[P_ITYPE] == IT_OFF || trk[MAKU_DRB].p[P_ITYPE] == IT_FLANGER || trk[MAKU_DRB].p[P_ITYPE] == IT_CHORUS);
+        ins_worlds += trk[MAKU_DRA].p[P_ITYPE] != IT_OFF || trk[MAKU_DRB].p[P_ITYPE] != IT_OFF;
+        ins_none += (trk[MAKU_DRA].p[P_ITYPE] == IT_OFF) + (trk[MAKU_DRB].p[P_ITYPE] == IT_OFF);   /* (a drone with none) */
         for (i = 1; i < 4u; i++)
             seen[i - 1u][trk[i].preset & 15u] = 1;
         maku_macro_set(MAKU_DRA, 0, 127);
@@ -605,6 +611,8 @@ static int worlds_voices(void)
             maxact = act > maxact ? act : maxact;
             steals += before >= NVOICE && vage > v0;
         }
+        ins_sounding += (trk[MAKU_DRA].p[P_ITYPE] != IT_OFF && trk[MAKU_DRA].p[P_IMIX] > 0 && ins[MAKU_DRA].w != 0) +
+                        (trk[MAKU_DRB].p[P_ITYPE] != IT_OFF && trk[MAKU_DRB].p[P_IMIX] > 0 && ins[MAKU_DRB].w != 0);
     }
     for (i = 0; i < 3u; i++)
         for (k = 0; k < 16u; k++)
@@ -612,6 +620,20 @@ static int worlds_voices(void)
     printf("ui:   12 worlds at DENSITY 127, OPEN and LOOSE 127: most voices at once %u, steals %u, %u distinct presets over the three voices\n",
            maxact, steals, presets_seen);
     bad += check("WORLDS: the voices change from world to world (>= 6 presets seen) and never run out of voices", presets_seen >= 6u && steals == 0u);
+    printf("ui:   INSERT: %u of 12 worlds give a drone one, %u drones none; %u set ones sounding at the end\n", ins_worlds, ins_none, ins_sounding);
+    bad += check("INSERT: only the drones get one (PHASR / CHOR, FLANG / CHOR), most worlds do, some drones do not, and a set one sounds",
+                 !ins_wrong && ins_worlds >= 6u && ins_none >= 1u && ins_sounding >= ins_worlds);
+    {   /* the TONE macro of the drone carries the MIX (20 .. 110): up with the macro */
+        uint32_t v;
+        int mono = 1, last = -1;
+        for (v = 0; v <= 127u; v += 9u) {
+            maku_macro_set(MAKU_DRA, 1, v);
+            mono &= trk[MAKU_DRA].p[P_IMIX] >= last && trk[MAKU_DRA].p[P_IMIX] <= 127;
+            last = trk[MAKU_DRA].p[P_IMIX];
+        }
+        maku_macro_set(MAKU_DRA, 1, 127);
+        bad += check("INSERT: the drone's TONE macro moves its MIX up to 110, within 0 .. 127", mono && trk[MAKU_DRA].p[P_IMIX] == 110);
+    }
     return bad;
 }
 

@@ -115,11 +115,11 @@ static const struct { const char *name; mm_t m[3]; } MAKU_MAC[4][3] = {
     },
     {   /* 2 DRONE */
         {"OPEN", {{MM_NONE, 0, 0}, {MM_NONE, 0, 0}, {MM_NONE, 0, 0}}},
-        {"TONE", {{P_E2, 40, 127}, {P_E6, 40, 127}, {MM_NONE, 0, 0}}},
+        {"TONE", {{P_E2, 40, 127}, {P_E6, 40, 127}, {P_IMIX, 20, 110}}},   /* (the INSERT's MIX; a world with none: inert) */
         {"SWAY", {{P_CHOR, 0, 90}, {P_LD_FLT, 0, 50}, {P_REL, 60, 110}}},
     },
     {   /* 3 SHIMMER */
-        {"GRAIN", {{P_E3, 30, 127}, {P_E2, 120, 40}, {MM_NONE, 0, 0}}},
+        {"GRAIN", {{P_E3, 30, 127}, {P_E2, 120, 40}, {P_IMIX, 0, 90}}},   /* (.. and here) */
         {"TONE", {{P_E7, 40, 127}, {P_E5, 10, 90}, {P_E6, 0, 60}}},
         {"AIR", {{P_REV, 60, 127}, {P_DLY, 0, 70}, {P_ATK, 60, 127}}},
     },
