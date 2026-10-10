@@ -349,12 +349,12 @@ static void maku_pick(uint32_t note)
     maku.pk_av = (uint8_t)((maku.pk_av & ~(1u << w)) | ((((m >> ((note + 120u - (uint32_t)trk[MAKU_ARP].p[P_ROOT]) % 12u)) & 1u) ? 0u : 1u) << w));
 }
 
-/* the SELECT macro of the drones and the arp also stretches their time: above the middle the more of their steps are left
+/* the SELECT macro of the drones and the arp also stretches their time: below the middle the more of their steps are left
  * out (the kick's DENSITY the other way round), up to `max` percent. Rolled where the part would sound a new note */
 static uint32_t maku_spare(uint32_t i, uint32_t max)
 {
     uint32_t m = maku.m[i][0];
-    return m > 64u && (uint32_t)(rng() % 100u) < (m - 64u) * max / 63u;     /* (the middle and below: as before) */
+    return m < 64u && (uint32_t)(rng() % 100u) < (64u - m) * max / 64u;     /* (the middle and above: as before) */
 }
 
 /* ARP, one step of the phrase table as it runs. CASCADE (casc) plays every step and ignores the breath, SCRAMBLE (scr) jumps
@@ -369,7 +369,7 @@ static uint32_t maku_arp_step(const track_t *t, uint32_t idx, uint32_t d, step_t
     }
     if (casc ? (uint32_t)(rng() % 127u) >= maku.vp[VB_CASC][0] : (d < 16u || (uint32_t)(rng() % 100u) >= 15u + (d - 16u) * 85u / 95u))
         return 0;
-    if (!casc && maku_spare(MAKU_ARP, 65u))         /* LOOSE: a longer, emptier phrase */
+    if (!casc && maku_spare(MAKU_ARP, 65u))         /* LOOSE to the left: a longer, emptier phrase */
         return 0;
     if (scr && (uint32_t)(rng() % 127u) < scr)      /* SCRAMBLE: a jump now and then, to wherever */
         maku.run_left = 0;

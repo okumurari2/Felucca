@@ -46,6 +46,8 @@ static void start(uint32_t dens)
     for (uint32_t i = 0; i < NTRK; i++)
         trk[i].engine = trk[i].eng_req;              /* (the audio ISR switches engines at a block start) */
     maku_set_density(dens);
+    for (uint32_t i = 1; i < 4u; i++)
+        maku.m[i][0] = 64;                           /* (the SELECT macros of the parts at the middle: no stretch; OPEN / LOOSE keep their set values) */
     memset(nhits, 0, sizeof nhits);
     seq_start();
 }
@@ -191,6 +193,18 @@ static int scale(void)
     start(127);
     sim(BAR_STEPS * 8u);
     bad += check("  and plays at 127", nhits[3] > 40u);
+    {                                                   /* the parts' SELECT macro to the left stretches them: fewer hits, none at all held silent */
+        uint32_t full[4], i, silent = 0;
+        for (i = 1; i < 4u; i++)
+            full[i] = nhits[i];
+        start(127);
+        for (i = 1; i < 4u; i++)
+            maku.m[i][0] = 0;
+        sim(BAR_STEPS * 8u);
+        for (i = 1; i < 4u; i++)
+            silent += nhits[i] >= full[i];
+        bad += check("  SELECT macros at 0 stretch the drones and the arp (fewer hits than at the middle)", silent == 0u);
+    }
     return bad;
 }
 
