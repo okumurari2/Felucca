@@ -564,6 +564,75 @@ static int buttons(void)
     return bad;
 }
 
+/* OCT- / OCT+: a fifth down / up the circle of fifths, a change of key signature (maku_fifth), not a transposition */
+static int fifths(void)
+{
+    int bad = 0;
+    uint32_t i, ok = 1, k;
+    start(0);
+    ui.home = 1; ui.menu = 0; ui.confirm = 0;
+    for (i = 0; i < NTRK; i++)
+        trk[i].p[P_SCALE] = 1;                          /* MAJ */
+    maku_block();
+    down_for(B_OCTUP, 3);
+    let_go(B_OCTUP);
+    bad += check("FIFTHS: C major, OCT+: G major on all four tracks, the kick follows, the keys' octave untouched",
+                 trk[1].p[P_ROOT] == 7 && trk[0].p[P_ROOT] == 7 && trk[3].p[P_ROOT] == 7 && song.octave == 0 && trk[0].p[P_E1] < 64);
+    down_for(B_OCTDN, 3);
+    let_go(B_OCTDN);
+    down_for(B_OCTDN, 3);
+    let_go(B_OCTDN);
+    bad += check("  OCT- twice: back to C, then F (a flat)", trk[1].p[P_ROOT] == 5 && trk[2].p[P_ROOT] == 5);
+    for (i = 0; i < 12u; i++) {                         /* 12 steps up the circle: every key once, home again */
+        uint32_t seen = 0;
+        trk[1].p[P_ROOT] = 0;
+        maku_block();
+        for (k = 0; k < 12u; k++) {
+            maku_fifth(1);
+            seen |= 1u << trk[1].p[P_ROOT];
+        }
+        ok &= seen == 0xFFFu && trk[1].p[P_ROOT] == 0;
+    }
+    bad += check("  twelve steps up visit all twelve keys and come home", ok);
+    trk[1].p[P_ROOT] = 0;
+    maku_block();
+    maku_pick(65u);                                     /* F */
+    maku_pick(64u);                                     /* E */
+    maku_pick(66u);                                     /* F#: an avoid note in C major */
+    maku_fifth(1);
+    bad += check("  C -> G major: a picked F becomes F#, E stays, an avoid note stays as played",
+                 maku.pk[0] == 66u && maku.pk[1] == 64u && maku.pk[2] == 66u && !((maku.pk_av >> 0) & 1u) && !((maku.pk_av >> 2) & 1u));
+    maku_fifth(-1);
+    bad += check("  and back G -> C: F# becomes F again (the sharp is taken off)", maku.pk[0] == 65u && maku.pk[1] == 64u);
+    trk[1].p[P_SCALE] = 5;                              /* PEN: C D E G A -> G A B D E: C becomes B (one note, a semitone down) */
+    maku_block();
+    maku.pk_n = 0;
+    maku_pick(60u);
+    maku_pick(62u);
+    maku_fifth(1);
+    bad += check("  a pentatonic does the same: C -> B on the way to G, D stays", maku.pk[0] == 59u && maku.pk[1] == 62u);
+    start(127);
+    trk[1].p[P_SCALE] = 1;
+    maku_block();
+    sim(16 * 3);
+    {
+        uint32_t guard = 0;
+        while (!maku.run_left && guard++ < 2000u)
+            sim(1);
+        bad += check("  an arp run in progress: it goes on in the old frame (no jump in pitch), and every note stays in key",
+                     maku.run_left > 0u);
+        maku_fifth(1);
+        bad += check("  .. the frame is held for the run", maku.frame_on && maku.frame_root == 0u);
+        memset(nhits, 0, sizeof nhits);
+        sim(16 * 16);
+        ok = nhits[3] > 0u;
+        for (i = 0; i < nhits[3]; i++)
+            ok &= in_scale(hits[3][i].note, 7u, 1u) != 0;
+        bad += check("  .. and all the arp's notes after it are in G major", ok && !maku.frame_on);
+    }
+    return bad;
+}
+
 static int screen(void)
 {
     int bad = 0;
@@ -797,7 +866,7 @@ static int bench(void)
 
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + screen() + worlds_voices() + catalog() + (getenv("MAKU_BENCH") ? bench() : 0);
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + fifths() + screen() + worlds_voices() + catalog() + (getenv("MAKU_BENCH") ? bench() : 0);
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }

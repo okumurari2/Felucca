@@ -42,6 +42,8 @@ static struct {
     uint8_t loose;               /* ARP: LOOSE 0..127: how much the phrase unravels and climbs */
     uint8_t m[4][3];             /* the macro of each track's SELECT / PRESETS / ALGORITHM, 0..127 */
     uint8_t root, scale;         /* last ROOT / SCALE seen on any track (a change is copied to all four) */
+    uint8_t frame_on, frame_root; /* a key change by fifths (maku_fifth) while an arp run plays: the run goes on in the old ROOT's
+                                  * frame, with the new key signature, until it ends */
     uint8_t brk;                 /* PLAY is down: the BREAK */
     int32_t dive;                /* the BREAK's dive, Q12: the rest sinks into reverb and reverse delay; it comes up slowly */
     int32_t kfade;               /* the kick's level after a BREAK, Q12: out fast, back in slowly */
@@ -103,7 +105,7 @@ static uint32_t maku_hash(uint32_t i)
 
 /* scale degree `deg` (0 = the root, may exceed the scale's size: next octave) above MIDI note base + ROOT, always in
  * the scale of track t */
-static uint32_t maku_note(const track_t *t, uint32_t deg, uint32_t base)
+static uint32_t maku_note_in(const track_t *t, uint32_t root, uint32_t deg, uint32_t base)
 {
     uint32_t mask = scale_mask(t), count = (uint32_t)__builtin_popcount(mask), i, left;
     uint32_t n;
@@ -116,8 +118,31 @@ static uint32_t maku_note(const track_t *t, uint32_t deg, uint32_t base)
                 break;
             left--;
         }
-    n = base + (uint32_t)t->p[P_ROOT] + 12u * (deg / count) + i;
+    n = base + root + 12u * (deg / count) + i;
     return n > 127u ? 127u : n;
+}
+static uint32_t maku_note(const track_t *t, uint32_t deg, uint32_t base)
+{
+    return maku_note_in(t, (uint32_t)t->p[P_ROOT], deg, base);
+}
+
+/* a key change by fifths is a change of the key signature: note n, a note of the scale at ROOT `from`, stays where it is
+ * unless the new key (ROOT `to`, the same scale) lacks its pitch class, and then it moves the one semitone the
+ * signature changes (the new sharp for a step up the circle, the new flat for a step down), else the nearest pitch
+ * of the new key. A note outside the old scale (an avoid note played on the keys) stays as it was played */
+static uint32_t maku_resig(uint32_t n, uint32_t mask, uint32_t from, uint32_t to)
+{
+    uint32_t d, up = (to + 12u - from) % 12u == 7u;
+    if (!((mask >> ((n + 120u - from) % 12u)) & 1u) || ((mask >> ((n + 120u - to) % 12u)) & 1u))
+        return n;
+    for (d = 1; d < 6u; d++) {
+        uint32_t a = up ? n + d : n - d, b = up ? n - d : n + d;
+        if (((mask >> ((a + 120u - to) % 12u)) & 1u) && a < 128u)
+            return a;
+        if (((mask >> ((b + 120u - to) % 12u)) & 1u) && b < 128u)
+            return b;
+    }
+    return n;
 }
 
 /* the written material, as scale degrees (0 = ROOT, 7 = the octave; maku_note keeps them in the scale) */
@@ -360,6 +385,7 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         uint32_t deg;
         if (idx >= MAKU_ARP_GAP) {                  /* the breath: the phrase ends and the next one starts elsewhere */
             maku.run_left = 0;
+            maku.frame_on = 0;
             return 0;
         }
         if (maku_held(MAKU_ARP) && idx % MAKU_SLOW)   /* a slow melody moves on every 4th step only */
@@ -367,6 +393,7 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         if (d < 16u || (uint32_t)(rng() % 100u) >= 15u + (d - 16u) * 85u / 95u)
             return 0;
         if (!maku.run_left) {                       /* jump: a random place, a run of 3..8 (shorter when dense) */
+            maku.frame_on = 0;                      /* (a new run starts in the key as it is) */
             maku.pos = (uint8_t)(rng() % MAKU_TABLE);
             maku.run_left = (uint8_t)(3u + rng() % (6u - d / 32u));
         }
@@ -389,7 +416,11 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         else if ((uint32_t)(rng() % 100u) < maku.loose / 4u)         /* and climb: an octave up */
             deg += 7u;
         out->n = 1;
-        out->note[0] = (uint8_t)maku_note(t, deg, 48u);
+        if (maku.frame_on)                          /* a key change mid-run: the run stays where it is, in the new signature */
+            out->note[0] = (uint8_t)maku_resig(maku_note_in(t, maku.frame_root, deg, 48u), scale_mask(t),
+                                                maku.frame_root, (uint32_t)t->p[P_ROOT]);
+        else
+            out->note[0] = (uint8_t)maku_note(t, deg, 48u);
         out->vel = (uint8_t)(46u + rng() % (14u + d / 4u));
         return 1;
     }
@@ -421,6 +452,30 @@ static void maku_follow(void)
         trk[i].p[P_ROOT] = trk[MAKU_DRA].p[P_ROOT];
         trk[i].p[P_SCALE] = trk[MAKU_DRA].p[P_SCALE];
     }
+}
+
+/* OCT+ / OCT- (dir > 0 / < 0): the key moves a fifth up / down the circle of fifths: a sharp more / a flat more. It is a change
+ * of key signature, not a transposition: what already plays or was played keeps its pitch, and only the one note the
+ * signature changes moves (F to F# from C major to G major). The notes picked by REC are mapped that way at once and an
+ * arp run in progress goes on in the old frame (maku_step); what starts after this is built on the new ROOT.
+ * The chords already sounding ring on: they are not retuned, the next one is in the new key */
+static void maku_fifth(int dir)
+{
+    track_t *a = &trk[MAKU_DRA];
+    uint32_t from = (uint32_t)a->p[P_ROOT] % 12u, to = (from + (dir > 0 ? 7u : 5u)) % 12u, mask = scale_mask(a), i;
+    if (!maku.on)
+        return;
+    for (i = 0; i < 4u && i < maku.pk_n; i++)
+        maku.pk[i] = (uint8_t)maku_resig(maku.pk[i], mask, from, to);
+    if (maku.run_left && !maku.frame_on) {
+        maku.frame_root = (uint8_t)from;
+        maku.frame_on = 1;
+    }
+    a->p[P_ROOT] = (int16_t)to;
+    maku_follow();
+    maku.root = (uint8_t)to;
+    for (i = 0; i < 4u && i < maku.pk_n; i++)                      /* (the avoid flags: against the new key) */
+        maku.pk_av = (uint8_t)((maku.pk_av & ~(1u << i)) | ((((mask >> ((maku.pk[i] + 120u - to) % 12u)) & 1u) ? 0u : 1u) << i));
 }
 
 /* once per block, before the tracks tick: a ROOT / SCALE edit on any track becomes everyone's */

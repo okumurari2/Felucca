@@ -60,6 +60,8 @@ static uint32_t oct_leds(void)
                (menu_step(ui.menu_sel, 1) != menu_get(ui.menu_sel) ? OCT_BREATH : 0u);         /* way it can go */
     if (ui.confirm || act_cols())
         return 1u | (ui.confirm || act_ready() ? OCT_BREATH : 0u);
+    if (maku.on)                                        /* MAKU: both breathe, the circle of fifths either way */
+        return OCT_BREATH | OCT_BREATH_DN;
     return (song.octave < 0 ? 1u : 0u) | (song.octave > 0 ? 2u : 0u);
 }
 
@@ -1321,7 +1323,7 @@ static void ui_input(void)
     if (home == BT_TAP)                                 /* HOME acts on release: a hold opens the menu */
         go_home();
     cursor_fix();                                       /* LEN may have changed (knob, editor, load) */
-    if (maku_knobs_on()) {                              /* the verbs; of the buttons below only OCT- / OCT+ are still the legacy's */
+    if (maku_knobs_on()) {                              /* the verbs; of the buttons below only OCT- / OCT+ are still handled here: MAKU makes them the circle of fifths */
         if (!lay)
             maku_buttons(pressed, notes);
         pressed &= (1u << panel.btn[B_OCTDN]) | (1u << panel.btn[B_OCTUP]);
@@ -1356,6 +1358,11 @@ static void ui_input(void)
             uint32_t both = (1u << panel.btn[B_OCTDN]) | (1u << panel.btn[B_OCTUP]);
             if (act_cols() || layer_set_open())         /* action pages: enter / back (below); SET layers: OCT- */
                 break;
+            if (maku_knobs_on()) {                      /* MAKU: a fifth down / up the circle (maku_fifth) */
+                maku_fifth(b == B_OCTDN ? -1 : 1);
+                ui_say(b == B_OCTDN ? "FLAT: " : "SHARP: ", N_NOTE[(uint32_t)trk[MAKU_DRA].p[P_ROOT] % 12u]);
+                break;
+            }
             if ((fm1_in.buttons & both) == both)
                 song.octave = 0;
             else
