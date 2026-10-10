@@ -282,6 +282,23 @@ static int duck(void)
                  maku_gain(1) == 4096 && maku_gain(0) == 4096);
     maku.duck = 2300;
     bad += check("  the kick itself is never ducked", maku_gain(0) == 4096);
+    maku.duck = 4096;
+    maku.brk = 1;                                           /* the BREAK: the kick out fast, the rest dives into the sends */
+    for (b = 0; b < 200u; b++)
+        maku_block();
+    bad += check("BREAK: PLAY held pulls the kick to 0 and dives the rest (not the kick) into reverb and reverse",
+                 maku_gain(0) == 0 && maku_dive() > 500 && maku_gain(1) == 4096);
+    for (b = 0; b < 2000u; b++)
+        maku_block();
+    bad += check("  held ~1.5 s: the dive is full", maku_dive() == 4096);
+    maku.brk = 0;
+    for (b = 0; b < 1000u; b++)
+        maku_block();
+    bad += check("  let go: the kick fades in slowly (not back after 1000 blocks) and the dive lifts with it",
+                 maku_gain(0) > 900 && maku_gain(0) < 1100 && maku_dive() > 3000 && maku_dive() < 3200);
+    for (b = 0; b < 4000u; b++)
+        maku_block();
+    bad += check("  and after ~3 s the kick is full and the dive gone", maku_gain(0) == 4096 && maku_dive() == 0);
     return bad;
 }
 
