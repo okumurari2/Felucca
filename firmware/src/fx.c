@@ -29,6 +29,7 @@ static int16_t rvs_buf[2][RV_MAX] __attribute__((section(".pool")));
 static uint8_t fx_rvs;           /* REVERSE: its level, 0 = off (the macro of a track: maku.c) */
 static int32_t maku_dive(void);
 static int32_t maku_sink(void);
+static void maku_boost(uint32_t i, int32_t *c, int32_t *d, int32_t *r);
 /* REVERSE as played: the level, deepened towards full by the BREAK's dive (0 with MAKU off: fx_rvs exactly) */
 static uint32_t rvs_level(void)
 {
@@ -733,6 +734,7 @@ static void mix_part(track_t *t, uint32_t n)
             d += (((int32_t)(127 * 258 * 6 / 10) - (d < 127 * 258 * 6 / 10 ? d : 127 * 258 * 6 / 10)) * dv) >> 12;
             r += (((int32_t)(127 * 258 * 9 / 10) - (r < 127 * 258 * 9 / 10 ? r : 127 * 258 * 9 / 10)) * dv) >> 12;
         }
+        maku_boost((uint32_t)(t - trk), &c, &d, &r);   /* the held verbs (FOG, KEEP, CASCADE): more into the buses */
         int32_t xmax = c > d ? c : d;
         xmax = 0x7FFFFFFF / ((xmax > r ? xmax : r) | 1);   /* sends: loud chords at a high LEVEL */
         track_dist(t, b, n);

@@ -29,3 +29,7 @@ One line each, newest last. Reason after the dash.
 2026-10-10 SCL tapped steps MAJ MIN LYD DOR MIX PHRY PEN MPEN (major, minor in turn); a scale off the list restarts at MAJ - held, it is still the key picker, and its three knobs are ROOT / SCALE / REG (the drones' register, an octave either way).
 2026-10-10 GLO lost the tracks' gain (KNOB 1..4) and the SOLO keys (ui_layer.c, perform.c is left, perf_solo stays 0) - the mutes, UNMUTE ALL and TAP TEMPO stay; its three knobs are BPM / SWING / DUCK (DUCK 64 = the old dip). ui_test's GLO / #102 / #119 / #126 checks follow.
 2026-10-10 ui_draw.c: in MAKU the GLO and SCL layer maps are no longer drawn (the quadrants show the verb's parameters), the layers' logic is unchanged.
+2026-10-10 KEEP / SCRAMBLE / CASCADE / FOG / TWIST on SAVE / SEQ / ARP / FX / EDIT; ENV and LFO get none; the old verbs (FREEZE, TAPE, SWEEP, REPEAT, harmonizer, riser, ARP toggle) are gone from maku_buttons (perform.c is untouched, FOG uses its LPF macro perf_k[0]).
+2026-10-10 Held-verb amounts (maku.va, Q12) ramp in maku_block (up 16 / down 8 a block); the sends are added in fx.c mix_part through maku_boost (x1.0 exact with MAKU off, golden renders unchanged); TWIST moves the macros' effective value (maku_macro_set adds it, maku.m keeps the knob's own); KEEP records the arp's last 16 steps (kr / kv) and the drones' last steps (dc) in maku_step.
+2026-10-10 CASCADE's first parameter is DENSE (chance a step plays), not RATE as proposed - the step division would move the 29-step phrase against the others.
+

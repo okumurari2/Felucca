@@ -70,6 +70,11 @@ static const struct { const char *title, *name[3]; } MAKU_VB[VB_N] = {
     {"SINK", {"SINK", "WASH", "HUSH"}},                 /* PLAY: the reverb feeds back, the sends rise, the kick steps out */
     {"TEMPO", {"BPM", "SWING", "DUCK"}},                /* GLO */
     {"ROOT", {"ROOT", "SCALE", "REG"}},                 /* SCL */
+    {"KEEP", {"LEN", "HOLD", "ECHO"}},                  /* SAVE: the arp loops its last steps, the drones stay */
+    {"SCRAMBLE", {"ARP", "KICK", "SWING"}},             /* SEQ */
+    {"CASCADE", {"DENSE", "SPAN", "ECHO"}},             /* ARP */
+    {"FOG", {"WASH", "SPREAD", "DARK"}},                /* FX */
+    {"TWIST", {"DENS", "TONE", "WASH"}},                /* EDIT: every track's macros of that knob */
 };
 static const char *const MAKU_REG[3] = {"LOW", "MID", "HIGH"};
 
@@ -95,7 +100,10 @@ static int32_t maku_vb_value(uint32_t v, uint32_t j, char *b)
         str_cpy(b, MAKU_REG[g % 3], 8);
         return g * 63;
     }
-    fmt_int(b, g);
+    if (v == VB_KEEP && j == 0u)
+        fmt_int(b, 2 + g * 14 / 127);                    /* LEN: steps */
+    else
+        fmt_int(b, g);
     return g;
 }
 
@@ -170,7 +178,7 @@ static void mq_top_left(void)
 static void maku_draw(void)
 {
     static uint32_t sig;
-    uint32_t j, f = song.sel < 4u ? song.sel : 0u, v = ui.layer == LAYER_GLO ? VB_GLO : ui.layer == LAYER_SCL ? VB_ROOT : maku.brk ? VB_PLAY : VB_NONE, s;
+    uint32_t j, f = song.sel < 4u ? song.sel : 0u, v = ui.layer == LAYER_GLO ? VB_GLO : ui.layer == LAYER_SCL ? VB_ROOT : (uint32_t)maku.verb, s;
     s = f * 977u + v * 13u + (uint32_t)song.g[G_BPM] * 31u + (uint32_t)(ui.hot_t != 0u) * 7u + ui.hot_col;
     for (j = 0; j < 3u; j++)
         s = s * 31u + maku.m[f][j] + (v ? (uint32_t)maku.vp[v][j] * 7u : 0u);

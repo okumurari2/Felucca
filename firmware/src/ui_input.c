@@ -1068,7 +1068,7 @@ static uint32_t layer_open(void);                       /* (ui_layer.c) */
 static uint32_t maku_verb_now(void)
 {
     uint32_t l = layer_open();
-    return l == LAYER_GLO ? VB_GLO : l == LAYER_SCL ? VB_ROOT : maku.brk ? VB_PLAY : VB_NONE;
+    return l == LAYER_GLO ? VB_GLO : l == LAYER_SCL ? VB_ROOT : maku.verb;
 }
 /* SELECT / PRESETS / ALGORITHM (j = 0 / 1 / 2) turned by s in the verb v. GLO's j = 0 is the tempo (ui_input) */
 static void maku_verb_turn(uint32_t v, uint32_t j, int32_t s, uint32_t enc)
@@ -1125,34 +1125,32 @@ static void maku_knobs(void)
     }
 }
 
-/* AMBIENT.md: the buttons are verbs. Held ones: FX freeze, ENV tape stop, LFO filter sweep, SAVE beat repeat, EDIT
- * harmonizer + shimmer (all perform.c), PLAY pulls the kick out, SEQ the riser. Toggles: ARP, REC. HOME held: a new
- * world. GLO and SCL keep their layers (tempo, root). Called once a pass with the buttons' state */
+/* AMBIENT.md: the buttons are verbs, held ones: SAVE keeps (KEEP), SEQ scrambles (SCRAMBLE), ARP cascades (CASCADE), FX fogs (FOG),
+ * EDIT twists (TWIST), PLAY sinks. Each has three parameters on the screen while it is held (maku.vp). Toggle: REC. HOME held:
+ * a new world. GLO and SCL keep their layers (tempo, root). ENV and LFO have no verb. Called once a pass */
 static void maku_world_new(void);
 static void maku_buttons(uint32_t pressed, uint32_t notes)
 {
-    static uint32_t was;
-    static const struct { uint8_t b, e; } V[] = {
-        {B_FX, PF_FRZ}, {B_ENV, PF_TAPE}, {B_LFO, PF_LPF}, {B_SAVE, PF_R16}, {B_EDIT, PF_OUP}, {B_PLAY, PF_M1 + MAKU_KICK},
+    static const struct { uint8_t b, v; } V[] = {
+        {B_SAVE, VB_KEEP}, {B_SEQ, VB_SCRAM}, {B_ARP, VB_CASC}, {B_FX, VB_FOG}, {B_EDIT, VB_TWIST}, {B_PLAY, VB_PLAY},
     };
-    uint32_t i, k, down;
-    for (i = 0; i < NELEM(V); i++) {
-        down = (fm1_in.buttons >> panel.btn[V[i].b]) & 1u;
-        if (down != ((was >> i) & 1u)) {
-            perf_press(V[i].e, (int)down);
-            was ^= 1u << i;
-            if (V[i].b == B_EDIT)
-                perf_k[3] = (int8_t)(down ? 60 : 0);
-        }
+    uint32_t i, k, nh = 0, fresh;
+    for (i = 0; i < NELEM(V); i++)
+        if ((fm1_in.buttons >> panel.btn[V[i].b]) & 1u)
+            nh |= VBIT(V[i].v);
+    fresh = nh & ~(uint32_t)maku.hv;
+    for (i = 0; i < NELEM(V); i++)                      /* the screen and the knobs go to the verb pressed last */
+        if ((fresh >> V[i].v) & 1u)
+            maku.verb = V[i].v;
+    maku.hv = (uint16_t)nh;
+    if (!((nh >> maku.verb) & 1u)) {
+        maku.verb = VB_NONE;
+        for (i = 0; i < NELEM(V); i++)
+            if ((nh >> V[i].v) & 1u)
+                maku.verb = V[i].v;
     }
-    maku.riser = (uint8_t)((fm1_in.buttons >> panel.btn[B_SEQ]) & 1u);
-    maku.brk = (uint8_t)((fm1_in.buttons >> panel.btn[B_PLAY]) & 1u);
-    if ((pressed >> panel.btn[B_ARP]) & 1u) {
-        uint32_t on = !trk[0].p[P_AMODE];
-        for (i = 0; i < NTRK; i++)
-            trk[i].p[P_AMODE] = (int16_t)on;
-        ui_message(on ? "ARP ON" : "ARP OFF");
-    }
+    maku.brk = (uint8_t)((nh >> VB_PLAY) & 1u);
+    perf_k[0] = (int8_t)((nh >> VB_FOG) & 1u ? -((int32_t)maku.vp[VB_FOG][2] * 70 / 127) : 0);   /* FOG: DARK closes the master's low-pass */
     if ((pressed >> panel.btn[B_REC]) & 1u) {
         maku.rec = (uint8_t)!maku.rec;
         ui_message(maku.rec ? "REC ON" : "REC OFF");
@@ -1371,6 +1369,8 @@ static void ui_input(void)
     if (maku_knobs_on()) {                              /* the verbs; of the buttons below only OCT- / OCT+ are still handled here: MAKU makes them the circle of fifths */
         if (!lay)
             maku_buttons(pressed, notes);
+        else
+            maku.hv = maku.verb = maku.brk = 0;         /* (GLO or SCL is up: no verb is held) */
         pressed &= (1u << panel.btn[B_OCTDN]) | (1u << panel.btn[B_OCTUP]);
         ui.pg_down = 0;
     }

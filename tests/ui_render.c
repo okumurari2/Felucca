@@ -658,7 +658,7 @@ enum { S_HOME, S_HOME_IDLE, S_MESSAGE, S_MESSAGE_KEY, S_MESSAGE_NOFILE, S_PRESET
        S_ROLL_LOCKS, S_ROLL_LOCK_HELD, S_DRUM_LOCKS, S_DRUM_LOCK_HELD, S_MOTION_LOCKS, S_AUTO_LIST, S_AUTO_LIST_ADD, S_AUTO_LIST_DRUM, S_REC_LAYER, S_REC_LAYER_SET, S_REC_LAYER_SONG,
        S_COUNTIN, S_COUNTIN2, S_MENU_AUDIO, S_HEAD_PLAY_REC, S_HEAD_REC_OTHER, S_HEAD_BPM_TURN, S_HEAD_BPM_LOCK,
        S_HEAD_BPM_LOCKED, S_HEAD_GLO_TURN, S_HEAD_DOWNBEAT, S_HEAD_BEAT_2,
-       S_MOCK_HOME, S_MOCK_PRESETS, S_MOCK_SEQ, S_MOCK_DRUM, S_MOCK_MIXER, S_MOCK_DIALOG, S_MOCK_MENU, S_MAKU_1, S_MAKU_3, S_MAKU_PLAY, S_MAKU_GLO, S_MAKU_ROOT, S_COUNT };
+       S_MOCK_HOME, S_MOCK_PRESETS, S_MOCK_SEQ, S_MOCK_DRUM, S_MOCK_MIXER, S_MOCK_DIALOG, S_MOCK_MENU, S_MAKU_1, S_MAKU_3, S_MAKU_PLAY, S_MAKU_GLO, S_MAKU_ROOT, S_MAKU_KEEP, S_MAKU_SCRAM, S_MAKU_CASC, S_MAKU_FOG, S_MAKU_TWIST, S_COUNT };
 static const char *const S_NAME[S_COUNT] = {"home", "home_idle", "message", "message_key", "message_nofile", "presets", "presets_nofav", "user",
     "phrases", "project", "tools", "song_empty", "song", "step", "pattern", "chance", "motion", "drum",
     "drum_hand", "drum_cym", "mixer", "mixer_pan", "env", "env_dest", "lfo", "mod", "fx", "slicer", "dly", "scl", "chord", "chord_wide", "chord_off", "chord_kit", "arp",
@@ -676,7 +676,7 @@ static const char *const S_NAME[S_COUNT] = {"home", "home_idle", "message", "mes
     "roll_locks", "roll_lock_held", "drum_locks", "drum_lock_held", "motion_locks", "auto_list", "auto_list_add", "auto_list_drum", "layer_rec", "layer_rec_set", "layer_rec_song",
     "countin", "countin_2bars", "menu_audio", "head_play_rec", "head_rec_other", "head_bpm_turn", "head_bpm_lock",
     "head_bpm_locked", "head_glo_turn", "head_downbeat", "head_beat_2",
-    "mock_home", "mock_presets", "mock_seq", "mock_drum", "mock_mixer", "mock_dialog", "mock_menu", "maku_1", "maku_3", "maku_play", "maku_glo", "maku_root"};
+    "mock_home", "mock_presets", "mock_seq", "mock_drum", "mock_mixer", "mock_dialog", "mock_menu", "maku_1", "maku_3", "maku_play", "maku_glo", "maku_root", "maku_keep", "maku_scramble", "maku_cascade", "maku_fog", "maku_twist"};
 
 /* the scenes of the UI design screens: the state the UI-redesign
  * prototype drew them from (its setup(): two pattern tracks, the drum pattern on track 4, a synthetic scope),
@@ -734,6 +734,10 @@ static void mock_state(int s)
         maku_setup(); song.sel = 1; ui.hot_t = 0; ui.force = 1;
         maku.brk = s == S_MAKU_PLAY;
         ui.layer = s == S_MAKU_GLO ? LAYER_GLO : s == S_MAKU_ROOT ? LAYER_SCL : 0;
+        break;
+    case S_MAKU_KEEP: case S_MAKU_SCRAM: case S_MAKU_CASC: case S_MAKU_FOG: case S_MAKU_TWIST:
+        maku_setup(); song.sel = 2; ui.hot_t = 0; ui.force = 1;
+        maku.verb = (uint8_t)(VB_KEEP + (s - S_MAKU_KEEP));
         break;
     case S_MAKU_1: case S_MAKU_3: maku_setup(); song.sel = s == S_MAKU_1 ? 0 : 2; ui.hot_t = 0; ui.force = 1; break;   /* MAKU on (ui_maku.c): the focus on track 1 / 3 */
     default: break;

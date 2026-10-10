@@ -30,7 +30,8 @@
 
 /* The verbs that hold three parameters of their own: while the button is held the screen shows them and SELECT / PRESETS /
  * ALGORITHM move them (a verb's values stay until the next world). HOME has none. */
-enum { VB_NONE, VB_PLAY, VB_GLO, VB_ROOT, VB_N };
+enum { VB_NONE, VB_PLAY, VB_GLO, VB_ROOT, VB_KEEP, VB_SCRAM, VB_CASC, VB_FOG, VB_TWIST, VB_N };
+#define VBIT(v) (1u << (v))
 #define MAKU_NSCALE 8u
 static const uint8_t MAKU_SCALES[MAKU_NSCALE] = {1, 2, 9, 3, 4, 8, 5, 6};   /* MAJ MIN LYD DOR MIX PHRY PEN MPEN: major, minor, major, minor, ... */
 
@@ -40,8 +41,14 @@ static struct {
     uint8_t run_left;            /* arp steps still to play from the table before it jumps */
     uint8_t pos;                 /* the place in the table */
     uint8_t cyc_a, cyc_b;        /* drone cycles done: the chord note rotates with them */
-    uint16_t rise_q;             /* SEQ held: the riser, Q8 of density added on top (0 .. 80) */
-    uint8_t riser;               /* SEQ is down */
+    uint16_t hv;                 /* the verbs held now, a bit each (VBIT) */
+    uint8_t verb;                /* the one whose parameters the screen and the knobs have: the last pressed of those held (VB_NONE) */
+    int16_t va[VB_N];            /* each held verb's amount, Q12: it comes up in ~0.3 s and goes in ~0.6 s (maku_block) */
+    int16_t tw_q;                /* TWIST: the amount the macros were last set for */
+    uint8_t kr[16], kv[16];      /* KEEP: the arp's last 16 steps (note, 0 = a rest; velocity), kw the next to write */
+    uint8_t kw, kcount, kn, kp, kact;   /* .. how many are written, the loop's length, its place, KEEP is on the loop */
+    step_t dc[3];                /* KEEP: the drones' last steps (DRONE A, SHIMMER at 0 and at 7), played again while held */
+    uint8_t dvalid;              /* .. bit i: dc[i] holds one */
     uint8_t rec;                 /* REC is on: played notes are picked up by the arp phrase */
     uint8_t pk[4], pk_n, pk_av;  /* the last notes played (ring of 4); bit i of pk_av: pk[i] is outside the scale */
     uint8_t open;                /* DRONE: OPEN 0..127: how many voices of the chord and how wide */
@@ -51,7 +58,9 @@ static struct {
     uint8_t frame_on, frame_root; /* a key change by fifths (maku_fifth) while an arp run plays: the run goes on in the old ROOT's
                                   * frame, with the new key signature, until it ends */
     uint8_t brk;                 /* PLAY is down: the BREAK */
-    uint8_t vp[VB_N][3];         /* the verbs' parameters, 0..127 (PLAY: SINK, WASH, HUSH; GLO: -, SWING, DUCK; ROOT: -, -, REG 0..2) */
+    uint8_t vp[VB_N][3];         /* the verbs' parameters, 0..127 (PLAY: SINK WASH HUSH; GLO: - SWING DUCK; ROOT: - - REG 0..2;
+                                  * KEEP: LEN HOLD ECHO; SCRAMBLE: ARP KICK SWING; CASCADE: DENSE SPAN ECHO; FOG: WASH SPREAD DARK;
+                                  * TWIST: DENS TONE WASH) */
     int32_t dive;                /* the BREAK's dive, Q12: the rest sinks into reverb and reverse delay; it comes up slowly */
     int32_t kfade;               /* the kick's level after a BREAK, Q12: out fast, back in slowly */
     int32_t duck;                /* the kick's dip of the other tracks' level, Q12 (4096: none); it recovers in maku_block */
@@ -196,6 +205,8 @@ static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
         return;
     v = v > 127u ? 127u : v;
     maku.m[i][j] = (uint8_t)v;
+    v += ((uint32_t)maku.vp[VB_TWIST][j] * (uint32_t)maku.va[VB_TWIST]) >> 12;   /* TWIST held: all of them, further on */
+    v = v > 127u ? 127u : v;
     for (n = 0; n < 3u; n++) {
         const mm_t *e = &MAKU_MAC[i][j].m[n];
         if (e->p != MM_NONE)
@@ -264,11 +275,10 @@ static uint32_t maku_kick_op(uint32_t m, uint32_t op, uint32_t r)
     return m;
 }
 
-/* DENSITY as played: the knob plus the riser */
+/* DENSITY as played */
 static uint32_t maku_eff(void)
 {
-    uint32_t d = (uint32_t)maku.dens + (uint32_t)(maku.rise_q >> 8);
-    return d > 127u ? 127u : d;
+    return maku.dens;
 }
 
 /* a note played on the keys while REC is on (the scale's mask of the arp's track says if it is an avoid note) */
@@ -278,6 +288,94 @@ static void maku_pick(uint32_t note)
     maku.pk[i] = (uint8_t)note;
     maku.pk_av = (uint8_t)((maku.pk_av & ~(1u << i)) | ((((m >> ((note + 120u - (uint32_t)trk[MAKU_ARP].p[P_ROOT]) % 12u)) & 1u) ? 0u : 1u) << i));
     maku.pk_n++;
+}
+
+/* ARP, one step of the phrase table as it runs. CASCADE (casc) plays every step and ignores the breath, SCRAMBLE (scr) jumps
+ * about the table and re-rolls more of it */
+static uint32_t maku_arp_step(const track_t *t, uint32_t idx, uint32_t d, step_t *out)
+{
+    uint32_t deg, casc = maku.hv & VBIT(VB_CASC), scr = (maku.hv & VBIT(VB_SCRAM)) ? maku.vp[VB_SCRAM][0] : 0u;
+    if (idx >= MAKU_ARP_GAP && !casc) {             /* the breath: the phrase ends and the next one starts elsewhere */
+        maku.run_left = 0;
+        maku.frame_on = 0;
+        return 0;
+    }
+    if (casc ? (uint32_t)(rng() % 127u) >= maku.vp[VB_CASC][0] : (d < 16u || (uint32_t)(rng() % 100u) >= 15u + (d - 16u) * 85u / 95u))
+        return 0;
+    if (scr && (uint32_t)(rng() % 127u) < scr)      /* SCRAMBLE: a jump now and then, to wherever */
+        maku.run_left = 0;
+    if (!maku.run_left) {                           /* jump: a random place, a run of 3..8 (shorter when dense) */
+        maku.frame_on = 0;                          /* (a new run starts in the key as it is) */
+        maku.pos = (uint8_t)(rng() % MAKU_TABLE);
+        maku.run_left = (uint8_t)(3u + rng() % (6u - d / 32u));
+    }
+    if (maku.rec && maku.pk_n && (uint32_t)(rng() % 100u) < 35u) {   /* REC: the field picks up what was played; */
+        uint32_t j = rng() % (maku.pk_n < 4u ? maku.pk_n : 4u);       /* an avoid note is taken less often */
+        if (!((maku.pk_av >> j) & 1u) || (uint32_t)(rng() % 100u) < 35u) {
+            out->n = 1;
+            out->note[0] = maku.pk[j];
+            out->vel = (uint8_t)(52u + rng() % 20u);
+            return 1;
+        }
+    }
+    maku.run_left--;
+    deg = MAKU_PHRASE[maku.pos];
+    maku.pos = (uint8_t)((maku.pos + 1u) % MAKU_TABLE);
+    if (deg == MAKU_REST)
+        return 0;
+    if ((uint32_t)(rng() % 100u) < d / 3u + maku.loose / 3u + scr * 40u / 127u)   /* loosen: re-roll this note */
+        deg = 7u + rng() % 10u;
+    else if ((uint32_t)(rng() % 100u) < maku.loose / 4u)         /* and climb: an octave up */
+        deg += 7u;
+    out->n = 1;
+    if (maku.frame_on)                              /* a key change mid-run: the run stays where it is, in the new signature */
+        out->note[0] = (uint8_t)maku_resig(maku_note_in(t, maku.frame_root, deg, 48u), scale_mask(t),
+                                            maku.frame_root, (uint32_t)t->p[P_ROOT]);
+    else
+        out->note[0] = (uint8_t)maku_note(t, deg, 48u);
+    out->vel = (uint8_t)(46u + rng() % (14u + d / 4u));
+    return 1;
+}
+
+/* the arp's step: the table, or while KEEP is held a loop of the last LEN steps it played (rests too), then CASCADE's octaves (SPAN)
+ * stacked on the note */
+static uint32_t maku_arp_keep(const track_t *t, uint32_t idx, uint32_t d, step_t *out)
+{
+    uint32_t r;
+    if (maku.hv & VBIT(VB_KEEP)) {
+        if (!maku.kact) {                           /* it was just pressed: the loop is what was played last */
+            uint32_t n = 2u + (uint32_t)maku.vp[VB_KEEP][0] * 14u / 127u;
+            maku.kn = (uint8_t)(n > maku.kcount ? maku.kcount : n);
+            maku.kp = 0;
+            maku.kact = 1;
+        }
+    } else {
+        maku.kact = 0;
+    }
+    if (maku.kact && maku.kn) {
+        uint32_t slot = (uint32_t)(maku.kw + 16u - maku.kn + maku.kp++ % maku.kn) & 15u;
+        r = maku.kr[slot] != 0u;
+        if (r) {
+            out->n = 1;
+            out->note[0] = maku.kr[slot];
+            out->vel = maku.kv[slot];
+        }
+    } else {
+        r = maku_arp_step(t, idx, d, out);
+        maku.kr[maku.kw & 15u] = r ? out->note[0] : 0u;     /* (a loop of what was played) */
+        maku.kv[maku.kw & 15u] = out->vel;
+        maku.kw = (uint8_t)((maku.kw + 1u) & 15u);
+        if (maku.kcount < 16u)
+            maku.kcount++;
+    }
+    if (r && (maku.hv & VBIT(VB_CASC))) {
+        uint32_t sp = maku.vp[VB_CASC][1], n0 = out->note[0];
+        if (sp >= 32u && n0 + 12u < 128u)
+            out->note[out->n++] = (uint8_t)(n0 + 12u);
+        if (sp >= 80u && n0 + 24u < 128u)
+            out->note[out->n++] = (uint8_t)(n0 + 24u);
+    }
+    return r;
 }
 
 /* the step track i plays at idx, in place of its stored one. 0 = rest */
@@ -302,8 +400,13 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             }
             return 1;
         }
-        if ((uint32_t)(rng() % 100u) >= maku_kick_chance(idx, d))
-            return 0;
+        {
+            uint32_t ch = maku_kick_chance(idx, d);
+            if (maku.hv & VBIT(VB_SCRAM))               /* SCRAMBLE: ghosts everywhere */
+                ch = ch + (uint32_t)maku.vp[VB_SCRAM][1] * 40u / 127u > 100u ? 100u : ch + (uint32_t)maku.vp[VB_SCRAM][1] * 40u / 127u;
+            if ((uint32_t)(rng() % 100u) >= ch)
+                return 0;
+        }
         vel = 30u + d * 80u / 127u;
         if (idx == 0 && d >= 40u)
             vel += 10u;
@@ -319,6 +422,10 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
     case MAKU_DRA:
         if (idx % 19u)
             return 0;
+        if ((maku.hv & VBIT(VB_KEEP)) && ((maku.dvalid >> 0) & 1u) && (uint32_t)(rng() % 127u) < maku.vp[VB_KEEP][1]) {
+            *out = maku.dc[0];                          /* KEEP: the chord stays (HOLD: how surely) */
+            return 1;
+        }
         if (idx == 0)
             maku.cyc_a++;
         {
@@ -333,10 +440,16 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             out->n = (uint8_t)k;
         }
         out->vel = (uint8_t)(78u - d / 4u - (idx / 19u) * 6u);
+        maku.dc[0] = *out;
+        maku.dvalid |= 1u;
         return 1;
     case MAKU_DRB:
         if (idx != 0 && idx != 7u)
             return 0;
+        if ((maku.hv & VBIT(VB_KEEP)) && ((maku.dvalid >> (1u + (idx != 0u))) & 1u) && (uint32_t)(rng() % 127u) < maku.vp[VB_KEEP][1]) {
+            *out = maku.dc[1u + (idx != 0u)];
+            return 1;
+        }
         if (idx == 0)
             maku.cyc_b++;
         if (idx == 0) {
@@ -349,48 +462,11 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
             out->n = 2;
         }
         out->vel = (uint8_t)(58u - d / 5u);
+        maku.dc[1u + (idx != 0u)] = *out;
+        maku.dvalid |= 1u << (1u + (idx != 0u));
         return 1;
-    case MAKU_ARP: {
-        uint32_t deg;
-        if (idx >= MAKU_ARP_GAP) {                  /* the breath: the phrase ends and the next one starts elsewhere */
-            maku.run_left = 0;
-            maku.frame_on = 0;
-            return 0;
-        }
-        if (d < 16u || (uint32_t)(rng() % 100u) >= 15u + (d - 16u) * 85u / 95u)
-            return 0;
-        if (!maku.run_left) {                       /* jump: a random place, a run of 3..8 (shorter when dense) */
-            maku.frame_on = 0;                      /* (a new run starts in the key as it is) */
-            maku.pos = (uint8_t)(rng() % MAKU_TABLE);
-            maku.run_left = (uint8_t)(3u + rng() % (6u - d / 32u));
-        }
-        if (maku.rec && maku.pk_n && (uint32_t)(rng() % 100u) < 35u) {   /* REC: the field picks up what was played; */
-            uint32_t j = rng() % (maku.pk_n < 4u ? maku.pk_n : 4u);       /* an avoid note is taken less often */
-            if (!((maku.pk_av >> j) & 1u) || (uint32_t)(rng() % 100u) < 35u) {
-                out->n = 1;
-                out->note[0] = maku.pk[j];
-                out->vel = (uint8_t)(52u + rng() % 20u);
-                return 1;
-            }
-        }
-        maku.run_left--;
-        deg = MAKU_PHRASE[maku.pos];
-        maku.pos = (uint8_t)((maku.pos + 1u) % MAKU_TABLE);
-        if (deg == MAKU_REST)
-            return 0;
-        if ((uint32_t)(rng() % 100u) < d / 3u + maku.loose / 3u)     /* loosen: re-roll this note */
-            deg = 7u + rng() % 10u;
-        else if ((uint32_t)(rng() % 100u) < maku.loose / 4u)         /* and climb: an octave up */
-            deg += 7u;
-        out->n = 1;
-        if (maku.frame_on)                          /* a key change mid-run: the run stays where it is, in the new signature */
-            out->note[0] = (uint8_t)maku_resig(maku_note_in(t, maku.frame_root, deg, 48u), scale_mask(t),
-                                                maku.frame_root, (uint32_t)t->p[P_ROOT]);
-        else
-            out->note[0] = (uint8_t)maku_note(t, deg, 48u);
-        out->vel = (uint8_t)(46u + rng() % (14u + d / 4u));
-        return 1;
-    }
+    case MAKU_ARP:
+        return maku_arp_keep(t, idx, d, out);
     }
     return 0;
 }
@@ -399,7 +475,9 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
 static void maku_apply(void)
 {
     uint32_t d = maku.dens;
-    trk[MAKU_ARP].p[P_SSWING] = (int16_t)(d * 24u / 127u + (uint32_t)maku.vp[VB_GLO][1] * 40u / 127u);   /* the arp drifts off the grid as it gets dense; GLO's SWING adds to it */
+    uint32_t sw = (d * 24u / 127u + (uint32_t)maku.vp[VB_GLO][1] * 40u / 127u +
+                                    ((uint32_t)maku.vp[VB_SCRAM][2] * (uint32_t)maku.va[VB_SCRAM] >> 12) * 40u / 127u);   /* the arp drifts off the grid as it gets dense; GLO's SWING and SCRAMBLE's add to it */
+    trk[MAKU_ARP].p[P_SSWING] = (int16_t)(sw > 100u ? 100u : sw);
 }
 
 static void maku_set_density(uint32_t d)
@@ -451,11 +529,19 @@ static __attribute__((noinline)) void maku_block(void)
     uint32_t i;
     if (!maku.on)
         return;
-    if (maku.riser) {                                              /* SEQ held: about 5 s to +80, let go: a fall in 0.25 s */
-        maku.rise_q = (uint16_t)(maku.rise_q + 3u > 80u * 256u ? 80u * 256u : maku.rise_q + 3u);
-    } else {
-        maku.rise_q = (uint16_t)(maku.rise_q > 60u ? maku.rise_q - 60u : 0u);
+    for (i = VB_KEEP; i < VB_N; i++) {                             /* the held verbs come up in ~0.3 s and fall away in ~0.6 s */
+        int32_t a = maku.va[i];
+        a = (maku.hv >> i) & 1u ? (a + 16 > 4096 ? 4096 : a + 16) : (a > 8 ? a - 8 : 0);
+        maku.va[i] = (int16_t)a;
     }
+    if (maku.va[VB_TWIST] || maku.tw_q) {                          /* TWIST: every track's three macros move together */
+        uint32_t j;
+        maku.tw_q = maku.va[VB_TWIST];
+        for (i = 0; i < 4u; i++)
+            for (j = 0; j < 3u; j++)
+                maku_macro_set(i, j, maku.m[i][j]);
+    }
+    maku_apply();                                                  /* (SWING: SCRAMBLE's) */
     if (maku.brk) {                                                /* PLAY held: ~1.5 s down, the kick out in ~50 ms (HUSH: how far) */
         int32_t tgt = 4096 - (int32_t)maku.vp[VB_PLAY][2] * 4096 / 127;
         maku.dive = maku.dive + 3 > 4096 ? 4096 : maku.dive + 3;
@@ -493,6 +579,33 @@ static int32_t maku_gain(uint32_t i)
 static int32_t maku_dive(void)
 {
     return maku.on ? maku.dive * (int32_t)maku.vp[VB_PLAY][1] / 127 : 0;
+}
+
+/* x towards top by the verb's amount f (Q12) of its parameter k (0..127) */
+static int32_t maku_up(int32_t x, int32_t top, int32_t f, int32_t k)
+{
+    return x < top ? x + (((top - x) * f >> 12) * k) / 127 : x;
+}
+/* the sends of track i (fx.c mix_part, the scale of P_CHOR * 258 ..) with the held verbs on them: FOG washes everything but the
+ * kick (WASH: reverb and delay, SPREAD: chorus); KEEP and CASCADE throw the arp into the delay (ECHO) */
+static void maku_boost(uint32_t i, int32_t *c, int32_t *d, int32_t *r)
+{
+    int32_t f;
+    if (!maku.on)
+        return;
+    if (i != MAKU_KICK && (f = maku.va[VB_FOG]) != 0) {
+        *r = maku_up(*r, 127 * 258 * 9 / 10, f, maku.vp[VB_FOG][0]);
+        *d = maku_up(*d, 127 * 258 * 6 / 10, f, maku.vp[VB_FOG][0]);
+        *c = maku_up(*c, 127 * 258 * 8 / 10, f, maku.vp[VB_FOG][1]);
+    }
+    if (i == MAKU_ARP) {
+        if ((f = maku.va[VB_KEEP]) != 0)
+            *d = maku_up(*d, 127 * 258 * 8 / 10, f, maku.vp[VB_KEEP][2]);
+        if ((f = maku.va[VB_CASC]) != 0) {
+            *d = maku_up(*d, 127 * 258 * 8 / 10, f, maku.vp[VB_CASC][2]);
+            *r = maku_up(*r, 127 * 258 * 7 / 10, f, maku.vp[VB_CASC][2]);
+        }
+    }
 }
 
 /* the BREAK's pull on the reverb for fx.c (Q12): its tail feeds back harder the longer PLAY is held, as far as SINK says */

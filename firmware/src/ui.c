@@ -1165,6 +1165,10 @@ static void maku_setup(void)
     maku.vp[VB_PLAY][1] = maku.vp[VB_PLAY][2] = 127;
     maku.vp[VB_GLO][2] = 64;
     maku.vp[VB_ROOT][2] = 1;
+    {                                                  /* KEEP LEN HOLD ECHO; SCRAMBLE ARP KICK SWING; CASCADE DENSE SPAN ECHO; FOG WASH SPREAD DARK; TWIST DENS TONE WASH */
+        static const uint8_t D[5][3] = {{40, 127, 60}, {80, 60, 50}, {110, 60, 70}, {90, 70, 50}, {40, 60, 50}};
+        memcpy(&maku.vp[VB_KEEP][0], D, sizeof D);
+    }
     for (i = 0; i < NTRK; i++)
         maku_sound(i, MAKU_R[i].pre);
     trk[MAKU_DRA].p[P_LRATE] = 36;                    /* SWAY's slow LFO on the drone's filter */
@@ -1175,8 +1179,12 @@ static void maku_setup(void)
     maku_macro_set(MAKU_ARP, 0, 0);
     song.g[G_BPM] = 72;
     maku.on = 1;
-    maku.rec = maku.riser = 0;
-    maku.rise_q = 0;
+    maku.rec = 0;
+    maku.hv = maku.verb = maku.brk = 0;                /* (the verbs held, KEEP's loop and the drones it replays) */
+    memset(maku.va, 0, sizeof maku.va);
+    maku.tw_q = 0;
+    maku.kw = maku.kcount = maku.kn = maku.kp = maku.kact = maku.dvalid = 0;
+    memset(maku.kr, 0, sizeof maku.kr);
     maku.pk_n = maku.pk_av = 0;
     maku.dens = 0;
     maku.run_left = 0;
