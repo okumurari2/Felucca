@@ -549,9 +549,7 @@ static int buttons(void)
     bad += check("  .. and off", trk[0].p[P_AMODE] == 0);
     down_for(B_REC, 3);
     let_go(B_REC);
-    bad += check("  REC toggles the pick-up (and arms no recording)", maku.rec == 1 && song.rec == 0u);
-    down_for(B_REC, 3);
-    let_go(B_REC);
+    bad += check("  REC does nothing here (it arms no recording)", song.rec == 0u);
     {
         uint32_t r0 = (uint32_t)trk[1].p[P_ROOT], bpm = (uint32_t)song.g[G_BPM], same = 1, n;
         for (n = 0; n < 6u && same; n++) {
@@ -561,6 +559,40 @@ static int buttons(void)
         }
         bad += check("  HOME held: a new world (the key or the tempo changes within 6 tries); the menu stays shut", !same && !ui.menu);
     }
+    return bad;
+}
+
+/* the keys always melt into the arp phrase (no REC), and the oldest notes are pushed out and fade */
+static int melt(void)
+{
+    int bad = 0;
+    uint32_t i, n, hit_a = 0, hit_b = 0, still = 0;
+    step_t st;
+    start(127);
+    memset(maku.pk_w, 0, sizeof maku.pk_w);
+    for (i = 0; i < MAKU_PK; i++)
+        maku_pick(100u + i);                            /* 8 notes outside the arp's range: easy to tell */
+    for (i = 0; i < MAKU_PK; i++)
+        still += maku.pk_w[i] == 255u;
+    maku_pick(120u);                                    /* a 9th: it takes the place of the oldest (100) */
+    {
+        uint32_t has100 = 0, has120 = 0;
+        for (i = 0; i < MAKU_PK; i++) {
+            has100 |= maku.pk[i] == 100u;
+            has120 |= maku.pk[i] == 120u;
+        }
+        bad += check("MELT: eight notes are kept, a ninth pushes out the oldest one", still == MAKU_PK && !has100 && has120);
+    }
+    memset(maku.pk_w, 0, sizeof maku.pk_w);
+    maku_pick(110u);
+    for (n = 0; n < 4000u; n++) {
+        maku.run_left = 3;
+        if (maku_step(MAKU_ARP, 0u, &st) && st.n && st.note[0] == 110u)
+            hit_a += n < 400u;
+        if (n >= 3600u && st.n && st.note[0] == 110u)
+            hit_b++;
+    }
+    bad += check("  with REC never pressed the played note is heard in the phrase, then fades away for good", hit_a > 5u && hit_b == 0u);
     return bad;
 }
 
@@ -606,7 +638,7 @@ static int fifths(void)
     bad += check("  and back G -> C: F# becomes F again (the sharp is taken off)", maku.pk[0] == 65u && maku.pk[1] == 64u);
     trk[1].p[P_SCALE] = 5;                              /* PEN: C D E G A -> G A B D E: C becomes B (one note, a semitone down) */
     maku_block();
-    maku.pk_n = 0;
+    memset(maku.pk_w, 0, sizeof maku.pk_w);
     maku_pick(60u);
     maku_pick(62u);
     maku_fifth(1);
@@ -866,7 +898,7 @@ static int bench(void)
 
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + fifths() + screen() + worlds_voices() + catalog() + (getenv("MAKU_BENCH") ? bench() : 0);
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + melt() + fifths() + screen() + worlds_voices() + catalog() + (getenv("MAKU_BENCH") ? bench() : 0);
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }
