@@ -92,6 +92,7 @@ static struct {
     uint8_t voice[4];            /* the catalog row each track plays (maku_voices.c); 0xFF: none */
     uint8_t art[4];              /* how each track sounds (ART_*): from the catalog row */
     uint8_t atk0[4], rel0[4];    /* the track's ATK / REL of its articulation: a sustained voice's macros move around them */
+    int32_t bw;                  /* the breath slope's weight w, Q15 (0: tempo, 32768: breath); follows maku_breath_target slowly */
     int32_t duck;                /* the kick's dip of the other tracks' level, Q12 (4096: none); it recovers in maku_block */
     uint8_t pm[4];               /* how far each part's pitch may waver (PM_*; the floor and the haze, drawn per world) */
 } maku;
@@ -879,12 +880,33 @@ static void maku_env(uint32_t v)
     maku.va[v] = (int16_t)(q >> 12);
 }
 
+/* The breath slope's weight w (docs/BREATH_PLAN.md 1), Q15: the tempo value's smoothstep((70 - v) / 20), 0 on an external clock.
+ * maku.bw walks to it (about a breath: 1/4096 of the way each block), so a quick turn of the knob, or a clock that stops, never jumps. */
+static int32_t maku_breath_target(void)
+{
+    int32_t v = song.g[G_BPM], y;
+    if (song.g[G_CLOCK] || v >= 70)
+        return 0;
+    if (v <= 50)
+        return 32768;
+    y = (70 - v) * 32768 / 20;
+    return (int32_t)(((int64_t)y * y >> 15) * (98304 - 2 * y) >> 15);
+}
+static void maku_breath_step(void)
+{
+    int32_t t = maku_breath_target(), d = (t - maku.bw) >> 12;
+    maku.bw += d ? d : t > maku.bw ? 1 : t < maku.bw ? -1 : 0;
+}
+
 /* once per block, before the tracks tick: a ROOT / SCALE edit on any track becomes everyone's */
 static __attribute__((noinline)) void maku_block(void)
 {
     uint32_t i;
-    if (!maku.on)
+    if (!maku.on) {
+        maku.bw = 0;
         return;
+    }
+    maku_breath_step();
     maku_env(VB_SINK);
     for (i = VB_SCRAM; i < VB_N; i++)
         if (i != VB_DRIFT)
