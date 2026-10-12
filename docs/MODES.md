@@ -23,7 +23,7 @@ FM-1 の 1 つのファームに、複数のアプリ（モード）を入れて
 
 ## 残っている作業（順番どおり）
 
-1. **`control` をブロックサイズ引数付きにするか決める**（`control(uint32_t n)`）。t8lab の `t8_mode.c` は今 128 を直書き（`HALF_FRAMES`）。直したら t8lab のコピーにも反映。
+1. ~~`control` をブロックサイズ引数付きにするか~~ → **決定 2026-10-12：`control(uint32_t n)`**（mode.h と t8lab の `t8_mode.c` に反映済み）。
 2. **dsp へのイベント受け渡しをヘッダに入れるか決める**。今は `t8_mode.c` の配列 `t8_evq`。3 つ目のモードが出てきた時点で見直す。
 3. **MAKU を `mode_maku` で包む**：`main.c` の `maku_setup()` + `maku_world()` + `transport_req = 1`、`seq.c` の `maku_block()`、UI の `ui_input / ui_leds / ui_draw` を `fm1_mode_t` に載せ替える。MAKU の既存テスト（`tests/run_tests.sh`）が通ることを確認。**これが済むまで mode.h を main に入れない**（呼び出し元のない死んだヘッダになるため）。
 4. **t8lab のコア以降を C に移す**：dsp（キック共振器 `dsp/kick.js`、バス、voices）→ UI（`view()`、画面）。キット補間（`taste.js` の `blend` / `kitAt`）は dsp と同時。キック共振器は MAKU の `phys_dsp.c` の `ResonatorSvf` と共有できるか検討（PLAN M6）。

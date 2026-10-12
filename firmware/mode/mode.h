@@ -9,7 +9,7 @@
  *
  * Fit to today's MAKU (firmware/src, one compilation unit, so everything may stay static):
  *   enter()    <- maku_setup() + maku_world(seed) + transport_req = 1      (main.c, before the splash)
- *   control()  <- maku_block()                                              (seq.c, once per audio block)
+ *   control(n) <- maku_block()                                              (seq.c, once per audio block of n samples)
  *   render()   <- mix_block(out, n)                                         (audio.c; NULL = the shared mixer)
  *   frame()    <- ui_input(); ui_leds(); ui_draw();                         (main.c loop, <= ~60 / s)
  *   leave()    <- (new) fade out, stop notes, release the pool
@@ -41,7 +41,7 @@ typedef struct fm1_mode {
     /* Hooks. A NULL hook is skipped, except frame(). All run on the main-loop side unless noted. */
     void (*enter)(uint32_t seed);              /* once, after the hardware is up; audio may already be running */
     void (*leave)(void);                       /* once, before another mode enters; must leave the audio silent */
-    void (*control)(void);                     /* audio ISR side, once per block, before render: keep it cheap */
+    void (*control)(uint32_t n);               /* audio ISR side, once per block of n sample frames, before render: keep it cheap */
     void (*render)(int32_t *out, uint32_t n);  /* audio ISR side; NULL = the shared mixer (fx.c) */
     void (*frame)(void);                       /* keys / knobs, LEDs, screen: one call per UI frame */
 } fm1_mode_t;
