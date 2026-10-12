@@ -5,7 +5,9 @@
  * 2. below 70: the beat grows with no step (each lower value at most 12 % longer), 60 -> 53.1, 50 -> 30.7, 40 -> 13.3 BPM.
  * 3. an external clock still wins; the SLICER follows the song tempo.
  * 4. the weight w (maku.c): 0 at 70 and up, 0.5 at 60, 1 at 50 and below, 0 on an external clock; it walks to its target
- *    (never a step of more than 1/1000 a block), in both directions, without overshoot. */
+ *    (never a step of more than 1/1000 a block), in both directions, without overshoot.
+ * 5. the mixing (w = 0: nothing changes; w = 1: no kick, no ducking, verbs halved, the drones breathe by DEPTH; the envelope b(t)
+ *    is continuous over the bar, peaks at 1 - E of it, and the phase is the sequencer's position). */
 #define main hostsim_main
 #include "hostsim.c"
 #undef main
@@ -74,6 +76,58 @@ int main(void)
             prev = maku.bw;
         }
         bad += check("and back to 0 the same way", prev == 0 && !back);
+    }
+    {
+        uint32_t i, per, len = 16;
+        int32_t last = 0, jump = 0, peak_ph = 0, peak = 0, mn = 99999, mx = -1, dmx = 0;
+        host_tracks_init();
+        maku.on = 1;
+        maku.va[VB_SCRAM] = 4096;
+        maku.vp[VB_SCRAM][0] = 100;
+        maku.kfade = 4096;
+        maku.duck = 4096;
+        song.g[G_BPM] = 120;
+        trk[MAKU_KICK].p[P_SLEN] = 16;
+        trk[MAKU_KICK].p[P_SDIV] = 2;
+        per = div_samples(2);
+        maku.vp[VB_GLO][1] = 64;
+        maku.vp[VB_GLO][2] = 64;
+        maku.bw = 0;
+        maku_breath_env();
+        bad += check("w = 0: no dip, kick and verb at full, the dip is the old one",
+                     maku.bd == 0 && maku_gain(MAKU_KICK) == 4096 && maku_gain(1) == 4096 && maku_vamt(VB_SCRAM, 0) == 100 &&
+                     maku_dip(3000) == 4096 - (4096 - 3000));
+        maku.bw = 32768;
+        maku_breath_env();
+        bad += check("w = 1: the kick is gone, the verb halved, no ducking", maku_gain(MAKU_KICK) == 0 && maku_vamt(VB_SCRAM, 0) == 50 &&
+                     maku_dip(3000) == 4096);
+        for (i = 0; i < len * 8u; i++) {
+            int32_t ph;
+            trk[MAKU_KICK].seq_idx = (uint16_t)(i / 8u);
+            trk[MAKU_KICK].seq_pos = (i % 8u) * per / 8u;
+            maku_breath_env();
+            ph = (int32_t)(i * 32768u / (len * 8u));
+            if (i && (maku.bb - last > 2400 || last - maku.bb > 2400))
+                jump = 1;
+            if (maku.bb > peak) {
+                peak = maku.bb;
+                peak_ph = ph;
+            }
+            mn = maku.bb < mn ? maku.bb : mn;
+            mx = maku.bb > mx ? maku.bb : mx;
+            dmx = maku.bd > dmx ? maku.bd : dmx;
+            last = maku.bb;
+        }
+        bad += check("b(t) over the bar: 0..1, no jump, peak at 40 % with EXHALE 64 (4:6), DEPTH 64 dips the drones .25",
+                     !jump && mn == 0 && mx > 32600 && peak_ph > 32768 * 38 / 100 && peak_ph < 32768 * 42 / 100 &&
+                         dmx > 1000 && dmx <= 1024);
+        maku.vp[VB_GLO][1] = 127;
+        maku.vp[VB_GLO][2] = 127;
+        trk[MAKU_KICK].seq_idx = 0;
+        trk[MAKU_KICK].seq_pos = 0;
+        maku_breath_env();
+        bad += check("DEPTH 127 dips to .6 at the empty end", maku.bd > 2400 && maku.bd <= 2458);
+        maku.on = 0;
     }
     return bad ? 1 : 0;
 }
