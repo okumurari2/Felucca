@@ -37,6 +37,7 @@
  * REG), SEQ the tempo (VB_GLO), PLAY toggles DRIFT (RATE RANGE REACH). */
 enum { VB_NONE, VB_SINK, VB_GLO, VB_ROOT, VB_SCRAM, VB_CASC, VB_DRIFT, VB_LIFT, VB_SWELL, VB_WOB, VB_N };
 static uint32_t beat_samples(void);   /* (fx.c) */
+static uint32_t div_samples(uint32_t div);   /* (fx.c) */
 #define VBIT(v) (1u << (v))
 #define MAKU_NSCALE 8u
 static const uint8_t MAKU_SCALES[MAKU_NSCALE] = {1, 2, 9, 3, 4, 8, 5, 6};   /* MAJ MIN LYD DOR MIX PHRY PEN MPEN: major, minor, major, minor, ... */
@@ -93,6 +94,8 @@ static struct {
     uint8_t art[4];              /* how each track sounds (ART_*): from the catalog row */
     uint8_t atk0[4], rel0[4];    /* the track's ATK / REL of its articulation: a sustained voice's macros move around them */
     int32_t bw;                  /* the breath slope's weight w, Q15 (0: tempo, 32768: breath); follows maku_breath_target slowly */
+    int32_t bb;                  /* the breath envelope b(t), Q15 (0 empty .. 32768 full); maku_breath_env */
+    int32_t bd;                  /* the drones' dip from it, Q12 (0: none): the DEPTH of the breath */
     int32_t duck;                /* the kick's dip of the other tracks' level, Q12 (4096: none); it recovers in maku_block */
     uint8_t pm[4];               /* how far each part's pitch may waver (PM_*; the floor and the haze, drawn per world) */
 } maku;
@@ -129,7 +132,8 @@ static uint32_t maku_roll(uint32_t v)
 /* parameter k (0..127) of verb v at its amount: 0..k */
 static uint32_t maku_vamt(uint32_t v, uint32_t k)
 {
-    return (uint32_t)maku.vp[v][k] * (uint32_t)maku.va[v] >> 12;
+    uint32_t a = (uint32_t)maku.vp[v][k] * (uint32_t)maku.va[v] >> 12;
+    return a * (uint32_t)(32768 - maku.bw / 2) >> 15;       /* the breath slope halves what a verb can do (BREATH_PLAN 1) */
 }
 
 /* How a part sounds (docs/VOICES_RATING.md). STRK: struck, over at once; SOFT: struck softly (slower attack); SWEL: swells
@@ -263,6 +267,7 @@ static const uint8_t MAKU_PHRASE[MAKU_TABLE] = {              /* ARP: two 16-pla
 static int32_t maku_dip(int32_t dip)
 {
     int32_t d = 4096 - (4096 - dip) * (int32_t)maku.vp[VB_GLO][2] / 64;
+    d = 4096 - (int32_t)((int64_t)(4096 - d) * (32768 - maku.bw) >> 15);   /* the breath slope takes the ducking away (w -> 1) */
     return d < 0 ? 0 : d;
 }
 
@@ -682,7 +687,7 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
 static void maku_apply(void)
 {
     uint32_t d = maku.dens;
-    uint32_t sw = (d * 24u / 127u + (uint32_t)maku.vp[VB_GLO][1] * 40u / 127u + maku_vamt(VB_SCRAM, 2) * 70u / 127u);   /* the arp drifts off the grid as it gets dense; GLO's SWING and SCRAMBLE's add to it */
+    uint32_t sw = (d * 24u / 127u + (uint32_t)maku.vp[VB_GLO][1] * 40u / 127u * (uint32_t)(32768 - maku.bw) / 32768u + maku_vamt(VB_SCRAM, 2) * 70u / 127u);   /* the arp drifts off the grid as it gets dense; GLO's SWING and SCRAMBLE's add to it */
     trk[MAKU_ARP].p[P_SSWING] = (int16_t)(sw > 100u ? 100u : sw);
 }
 
@@ -898,15 +903,42 @@ static void maku_breath_step(void)
     maku.bw += d ? d : t > maku.bw ? 1 : t < maku.bw ? -1 : 0;
 }
 
+/* The breath: b(t) over the bar (the kick track's 16 steps, its position in the step: the phase is where the sequencer is, so
+ * entering the slope never restarts it). The inhale takes the share 1 - E of the bar, E = 0.5 .. 0.6 .. 0.7 for EXHALE (GLO's
+ * SWING knob) 0 .. 64 .. 127, drawn toward 0.5 by 1 - w; each half is a smoothstep. The drones' level follows it by DEPTH (GLO's
+ * DUCK knob: 0 none, 64 an anchor, 127 a clear guide) times w. Q15 */
+static int32_t maku_smooth(int32_t x)                    /* smoothstep of x (Q15, 0..32768) */
+{
+    return (int32_t)(((int64_t)x * x >> 15) * (98304 - 2 * x) >> 15);
+}
+static void maku_breath_env(void)
+{
+    const track_t *k = &trk[MAKU_KICK];
+    uint32_t len = k->p[P_SLEN] > 0 ? (uint32_t)k->p[P_SLEN] : 16u, per = div_samples((uint32_t)k->p[P_SDIV]);
+    uint32_t pos = k->seq_pos < per ? k->seq_pos : per, n = (k->seq_idx % len) * per + pos, d = (uint32_t)maku.vp[VB_GLO][2];
+    int32_t ex = maku.vp[VB_GLO][1], e, ph, amt;
+    ex = 16384 + (ex <= 64 ? ex * 3277 / 64 : 3277 + (ex - 64) * 3276 / 63);    /* the exhale's share, Q15: .5 .6 .7 */
+    e = 16384 + (int32_t)((int64_t)(ex - 16384) * maku.bw >> 15);
+    ph = per ? (int32_t)((uint64_t)n * 32768u / ((uint64_t)len * per)) : 0;
+    if (ph >= 32768 - e)                                 /* the exhale: down from full */
+        maku.bb = 32768 - maku_smooth((ph - (32768 - e)) * 32768 / (e ? e : 1));
+    else                                                 /* the inhale: up from empty */
+        maku.bb = maku_smooth(ph * 32768 / (32768 - e));
+    amt = d <= 64u ? (int32_t)d * 1024 / 64 : 1024 + ((int32_t)d - 64) * 1434 / 63;     /* of the drones' level, Q12: .25 .. .6 */
+    maku.bd = (int32_t)((int64_t)amt * maku.bw >> 15) * (32768 - maku.bb) / 32768;
+}
+
 /* once per block, before the tracks tick: a ROOT / SCALE edit on any track becomes everyone's */
 static __attribute__((noinline)) void maku_block(void)
 {
     uint32_t i;
     if (!maku.on) {
         maku.bw = 0;
+        maku.bd = 0;
         return;
     }
     maku_breath_step();
+    maku_breath_env();
     maku_env(VB_SINK);
     for (i = VB_SCRAM; i < VB_N; i++)
         if (i != VB_DRIFT)
@@ -970,8 +1002,8 @@ static int32_t maku_gain(uint32_t i)
     if (!maku.on)
         return 4096;
     if (i == MAKU_KICK)
-        return maku.kfade;
-    return i == MAKU_ARP ? 4096 - (4096 - maku.duck) / 2 : maku.duck;
+        return (int32_t)((int64_t)maku.kfade * (32768 - maku.bw) >> 15);     /* the kick leaves with the breath (it still steps) */
+    return (i == MAKU_ARP ? 4096 - (4096 - maku.duck) / 2 : maku.duck) * (4096 - maku.bd) >> 12;
 }
 
 /* SINK's depth for fx.c (Q12): the sends and the reverse swell sink as far as WASH says */
