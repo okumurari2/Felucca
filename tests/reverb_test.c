@@ -353,9 +353,9 @@ static void test_reverse(void)
     }
     {
         char what[220];
-        snprintf(what, sizeof what, "REVERSE: the tail comes back reversed, the second half of the segment more than 3x the first: energy by quarter of the segment %.0f %.0f %.0f %.0f; peak %.0f",
+        snprintf(what, sizeof what, "REVERSE: the tail comes back reversed, the second half of the segment more than 1.4x the first (the hall's long tail swells flatter): energy by quarter of the segment %.0f %.0f %.0f %.0f; peak %.0f",
                  q[0], q[1], q[2], q[3], peak);
-        check(what, q[2] + q[3] > 3 * (q[0] + q[1]) && peak < (1 << 22));
+        check(what, q[2] + q[3] > 1.4 * (q[0] + q[1]) && peak < (1 << 22));
     }
     fx_rvs = 0;
 }

@@ -842,7 +842,7 @@ static int verbs(void)
             }
             tail[pass] = (int32_t)(e >> 8);
         }
-        bad += check("  SINK: the room's tail is longer (over twice) while FX is held", tail[1] > 2 * tail[0]);
+        bad += check("  SINK: the hall's tail is longer (1.5x and more) while FX is held", 2 * tail[1] > 3 * tail[0]);
     }
     return bad;
 }

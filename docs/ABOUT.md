@@ -49,7 +49,7 @@ A machine for DJ-event interludes: plug it in and get some sound, fast. **The mo
 - **Four parts**: pulse (kick), floor (drone), haze (shimmer), voice (arpeggiated phrase). KNOB 1-4 are their volumes and move the focus; SELECT / PRESETS / ALGORITHM are the focused part's three macros.
 - **Verbs of change**: the upper row's six (sink, cascade, swell, wobble, lift, scramble) work while held. The lower row keeps things: key and scale, tempo, drift, modulation around the circle of fifths.
 - **Growing to taste**: REC keeps the world playing as a like (up to 16). Each HOME-held re-roll draws more often from your likes, a little changed, the more you have. Everything it stores is these likes.
-- **Sound**: a catalog of physical-model (PHYS) and granular (GRAIN) voices, each paired with an articulation (struck, soft, swell, bowed, held); chorus, tape delay, ROOM reverb and a reverse reverb.
+- **Sound**: a catalog of physical-model (PHYS) and granular (GRAIN) voices, each paired with an articulation (struck, soft, swell, bowed, held); chorus, tape delay, hall-like ROOM reverb and a reverse reverb.
 - **Try it in the browser**: the emulator runs the same code as the instrument, compiled to WebAssembly.
 - Verified on hardware. A derivative of Felucca (GPL-3.0-only) with the sequencer editing, saving, sound-design pages and web editor removed.
 

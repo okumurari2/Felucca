@@ -124,7 +124,7 @@ move now (the verb's own three while a verb is held). At most three parameters p
 
 ## Sound design notes
 
-Space (all in `fx.c`): ensemble chorus, tape delay, ROOM reverb with pre-delay and moving combs, SPRING, reverse reverb
+Space (all in `fx.c`): ensemble chorus, tape delay, ROOM reverb (a hall: long combs, 34 ms pre-delay, moving combs), SPRING, reverse reverb
 (amount from the haze's AIR). INSERT (Felucca 1.5): a per-world PHASR / CHOR (floor) or FLANG / CHOR (haze), kept on trial.
 Pitch levels: the floor and the haze each draw STILL 70 % / SWAY 22 % / WARP 8 % (never both WARP), which bounds the haze
 GRAIN's RAND and a swept INSERT's DEPTH and picks the INSERT (AMBIENT.md).

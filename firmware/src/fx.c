@@ -18,11 +18,11 @@
 #define CHO_LEN 2048u
 static int16_t dly_buf[DLY_LEN] __attribute__((section(".pool")));
 static int16_t cho_buf[CHO_LEN] __attribute__((section(".pool")));
-static const uint16_t REV_COMB[4] = {1116, 1188, 1277, 1356};
-static const uint16_t REV_AP[2] = {556, 441};
-static int16_t rev_comb[1116 + 1188 + 1277 + 1356] __attribute__((section(".pool")));
+static const uint16_t REV_COMB[4] = {2017, 2153, 2311, 2459};   /* a hall: ~46 .. 56 ms loops (was a room's 25 .. 31) */
+static const uint16_t REV_AP[2] = {701, 509};
+static int16_t rev_comb[2017 + 2153 + 2311 + 2459] __attribute__((section(".pool")));
 #define PD_LEN 2048u            /* the reverb's pre-delay line */
-#define PD_TIME 1100u           /* .. 25 ms */
+#define PD_TIME 1500u           /* .. 34 ms */
 static int16_t rev_pd[PD_LEN] __attribute__((section(".pool")));
 #define RV_MAX 8192u            /* the reverse buffers: two of these, the reverb's sum at half the rate (186 ms .. 0.74 s) */
 static int16_t rvs_buf[2][RV_MAX] __attribute__((section(".pool")));
@@ -39,8 +39,8 @@ static uint32_t rvs_level(void)
 static int32_t wet_r[CTL];       /* the wet return, right (fx_buses: the left is its `wet`) */
 static int32_t *rev_rp = wet_r;  /* where the reverb adds its right side (the model change's fade moves it) */
 static union {                          /* ROOM's allpasses; SPRING's allpass chain (int32: no clamps) */
-    int16_t ap[556 + 441];
-    int32_t sp[(556 + 441) / 2];
+    int16_t ap[701 + 509];
+    int32_t sp[(701 + 509) / 2];
 } rev_u __attribute__((section(".pool")));
 #define rev_ap (rev_u.ap)
 static struct {
@@ -273,7 +273,7 @@ static uint32_t delay_samples(void)
 static __attribute__((noinline)) void rev_room(const int32_t *rev_in, int32_t *out, uint32_t n)
 {
     uint32_t i, k;
-    int32_t size = 25000 + song.g[G_RSIZE] * 50, damp = 32767 - song.g[G_RDAMP] * 200;
+    int32_t size = 24500 + song.g[G_RSIZE] * 45, damp = 32767 - song.g[G_RDAMP] * 200;
     int32_t m[4] = {0, 0, 0, 0}, mf[4] = {0, 0, 0, 0};
     int32_t *outr = rev_rp, sk = maku_sink();
     if (sk)                                             /* FX held (SINK): the combs feed back towards 0.995, the tail swallows */
