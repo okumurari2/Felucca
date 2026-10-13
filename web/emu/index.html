@@ -93,9 +93,9 @@ footer small { font-size: 11px; opacity: .8; }
 </p>
 
 <footer>
-  <small class="version">@VERSION@@PREVIEW@</small><br>
+  <small class="version">@VERSION@@PREVIEW@ · build @BUILD@</small><br>
   MAKU, built on Felucca by Leo Kuroshita, Hügelton Instruments · <a href="https://www.gnu.org/licenses/gpl-3.0.html">GPL-3.0</a> · browser build after charlesvestal's <a href="https://github.com/charlesvestal/fm1-x0x">X0X</a> · DotGothic16 font, <a href="fonts/OFL.txt">SIL OFL 1.1</a><br>
-  <nav><a href="https://github.com/okumurari2/Felucca">Source</a> · <a href="https://github.com/hugelton/Felucca">Felucca</a></nav>
+  <nav><a href="https://github.com/okumurari2/maku">Source</a> · <a href="https://github.com/hugelton/Felucca">Felucca</a></nav>
   <small>M-VAVE and FM-1 are trademarks of their respective owners. Felucca is not affiliated with or endorsed by them.</small>
 </footer>
 </main>
@@ -116,7 +116,7 @@ const STORE = "felucca-emu-flash";
 // Two drawings of the same controls: WIDE after the FM-1's own layout, TALL for a phone held upright (the
 // screen larger, the keys across the whole width). Rebuilt when the orientation changes; the state stays.
 const ROW1 = ["FX", "SCL", "ENV", "LFO", "EDIT", "GLO"], ROW2 = ["HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC"];
-// what each button does on MAKU (docs/AMBIENT.md): the verb under its label. The upper row is held verbs of change; ARP is the key and
+// what each button does on MAKU (docs/AMBIENT.md): the verb under its label. The upper row is verbs of change, a press that lasts a few seconds; ARP is the key and
 // SEQ the tempo (hold, turn the three knobs); PLAY: tap switches DRIFT (its green LED), hold to set it; SAVE and REC do nothing
 const VERB = { FX: "SINK", SCL: "CASCADE", ENV: "SWELL", LFO: "WOBBLE", EDIT: "LIFT", GLO: "SCRAMBLE",
                HOME: "NEW", SAVE: "", ARP: "KEY", SEQ: "TEMPO", PLAY: "DRIFT", REC: "" };

@@ -279,12 +279,22 @@ static uint32_t key_leds(uint32_t *br)                 /* (*br: a layer's keys t
  * rest: the root's keys lit, the scale's at the mid level, the others glowing; the keys held and playing as ever
  * (lit, INV dark). Each picture is built off-line and copied one byte per column, the
  * glow first: an LED going from lit to dim never has a dark frame */
+/* MANNER:leds-auto. LEDS AUTO (the default, panel.c): DIM LO on the battery, DIM HI while a USB host is connected (it powers the unit; a
+ * plain charger shows no host, so it counts as the battery). The other modes are themselves */
+static uint32_t leds_eff(void)
+{
+    return settings_leds != LEDS_AUTO ? settings_leds : usb.config && !usb.suspended ? LEDS_DIM : LEDS_DIM_LO;
+}
+/* MAKU: the upper row's buttons and the verbs they hold (maku_buttons, ui_leds) */
+static const struct { uint8_t b, v; } MAKU_VBTN[] = {
+    {B_FX, VB_SINK}, {B_SCL, VB_CASC}, {B_ENV, VB_SWELL}, {B_LFO, VB_WOB}, {B_EDIT, VB_LIFT}, {B_GLO, VB_SCRAM},
+};
 static void ui_leds(void)
 {
     uint8_t nl[FM1_NCOL] = {0}, nd[FM1_NCOL] = {0}, own[FM1_NCOL] = {0}, og[FM1_NCOL] = {0}, nb[FM1_NCOL] = {0};
     uint8_t nm[FM1_NCOL] = {0}, sg[FM1_NCOL] = {0}, sm[FM1_NCOL] = {0};
     uint32_t k, c, g, br, beat, sc, sr = 0;
-    uint32_t fam = cur_fam(), mode = settings_leds;
+    uint32_t fam = cur_fam(), mode = leds_eff();
     int keys_map = keys_own();
     static uint8_t ready;
     if (fm1_led_anim_on())                              /* the power-on sweep has them (main.c boot_leds) */
@@ -299,9 +309,13 @@ static void ui_leds(void)
         led_put(nl, panel.btn[B_ARP], FAM_BTN[fam] == B_ARP ? !k : (int)k);   /* (on ARP's page: dark flashes) */
     if (!ui.layer && !maku.on && (perf_latched || perf_k[0] || perf_k[1] || perf_k[2] || perf_k[3]))
         led_put(nl, panel.btn[B_FX], 1);                /* FX LATCH: lit while an effect or a macro is on */
+    if (maku.on)                                        /* MAKU: a verb that is going is lit, one that is fading breathes */
+        for (k = 0; k < NELEM(MAKU_VBTN); k++)
+            if (maku.va[MAKU_VBTN[k].v] > 0)
+                led_put(maku.vph[MAKU_VBTN[k].v] == 2u ? nb : nl, panel.btn[MAKU_VBTN[k].b], 1);
     if (ui.layer)                                       /* the layer's button breathes while its map is up */
         led_put(nb, panel.btn[layer_btn()], 1);
-    led_put(nl, panel.btn[B_REC], (song.rec != 0u && ui.layer != LAYER_REC) || (maku.on && maku_fav.liked));   /* (its layer: it breathes; MAKU: this world is a like) */
+    led_put(nl, panel.btn[B_REC], (song.rec != 0u && ui.layer != LAYER_REC) || (maku.on && maku_fav_lit()));   /* (its layer: it breathes; MAKU: while "LIKED" is up) */
     k = oct_leds();
     led_put(nl, panel.btn[B_OCTDN], (int)(k & 1u));
     led_put(nl, panel.btn[B_OCTUP], (int)((k >> 1) & 1u));
@@ -1033,11 +1047,37 @@ static void sample_notice(void)
     }
 }
 
+/* MANNER:battery. BATTERY: nothing on the screen while it is fine (no icon: the top left stays "now"). On the battery (not while a USB
+ * host powers us) at 1 bar of 3 or less: "BATTERY LOW", at 0 "BATTERY EMPTY", in the message place, for ~2 s. Only
+ * once the level has held for 5 s (the small speaker's peaks sag the cell), again at once when it drops a bar, and
+ * every 2 minutes while it lasts. It waits for another message to end, and for the first reading (the emulator has
+ * none: batt_raw stays 0) */
+static void battery_notice(void)
+{
+    static uint32_t since, next;                        /* when the level began to be low (| 1; 0: it is not), the next reminder */
+    static int32_t said = 3;                            /* the level last announced (3: none yet) */
+    int32_t lv = batt_level();
+    if (!song.batt_raw || batt_shown() == 4 || lv > 1) {
+        since = 0;
+        said = 3;
+        return;
+    }
+    if (!since)
+        since = fm1_ms | 1u;
+    if ((int32_t)(fm1_ms - since) < 5000 || ui.msg_t || (lv >= said && (int32_t)(fm1_ms - next) < 0))
+        return;
+    ui_message(lv ? "BATTERY LOW" : "BATTERY EMPTY");
+    ui.msg_t = 120;
+    said = lv;
+    next = fm1_ms + 120000u;
+}
+
 /* messages of things that happened elsewhere (a load, the editor, MIDI in): after this frame's own */
 static void ui_notices(void)
 {
     static uint32_t midi_t, midi_last;
     sample_notice();
+    battery_notice();                                   /* MANNER:battery */
     if (motion_full) { motion_full = 0; ui_message("AUTOMATION FULL"); }
     if (midi_hint) {                                    /* MIDI notes into a track that is not selected */
         uint32_t h = midi_hint;
@@ -1083,6 +1123,8 @@ static void maku_verb_turn(uint32_t v, uint32_t j, int32_t s, uint32_t enc)
         maku.scale = (uint8_t)a->p[P_SCALE];
     } else if (v == VB_ROOT) {                          /* REG: LOW / MID / HIGH */
         maku.vp[v][2] = (uint8_t)clamp((int32_t)maku.vp[v][2] + (s > 0 ? 1 : -1), 0, 2);
+    } else if (v != VB_NONE && v < VB_N && maku_timed(v)) {      /* an upper verb: RISE HOLD FADE */
+        maku.vt[v][j] = (uint8_t)clamp((int32_t)maku.vt[v][j] + accel(enc, s, 127), 0, 127);
     } else if (v != VB_NONE && v < VB_N && !(v == VB_GLO && j == 0u)) {
         maku.vp[v][j] = (uint8_t)clamp((int32_t)maku.vp[v][j] + accel(enc, s, 127), 0, 127);
         if (v == VB_GLO)
@@ -1090,7 +1132,6 @@ static void maku_verb_turn(uint32_t v, uint32_t j, int32_t s, uint32_t enc)
         if (v == VB_DRIFT)
             maku.dr_moved = 1;                          /* (PLAY held and turned: letting go does not switch DRIFT) */
     }
-    ui.force = 1;
 }
 static void maku_knobs(void)
 {
@@ -1099,11 +1140,14 @@ static void maku_knobs(void)
     for (k = 0; k < 4u; k++) {
         if ((s = panel_enc(EN_K1 + k)) == 0)
             continue;
-        track_select(k);
+        {
+            uint8_t force = ui.force;
+            track_select(k);
+            ui.force = force;                           /* (the quadrants repaint opaque on f: no whole-screen fill) */
+        }
         trk[k].p[P_LEVEL] = (int16_t)clamp(trk[k].p[P_LEVEL] + accel(EN_K1 + k, s, 127), 0, 127);
         ui.hot_col = (uint8_t)k;
         ui.hot_t = 40;
-        ui.force = 1;
     }
     for (j = 0; j < 3u; j++) {
         uint32_t f = song.sel < 4u ? song.sel : 0u, e = j == 0u ? EN_SELECT : j == 1u ? EN_PRESET : EN_ALGO;
@@ -1116,7 +1160,6 @@ static void maku_knobs(void)
             maku_macro_set(f, j, (uint32_t)clamp((int32_t)maku.m[f][j] + accel(e, s, 127), 0, 127));
             fmt_int(b, maku.m[f][j]);
             ui_say(MAKU_MAC[f][j].name, b);
-            ui.force = 1;
         }
     }
 }
@@ -1131,7 +1174,7 @@ static void maku_buttons(uint32_t pressed, uint32_t notes)
 {
     static const struct { uint8_t b, v; } V[] = {
         {B_FX, VB_SINK}, {B_SCL, VB_CASC}, {B_ENV, VB_SWELL}, {B_LFO, VB_WOB}, {B_EDIT, VB_LIFT}, {B_GLO, VB_SCRAM}, {B_PLAY, VB_DRIFT},
-    };
+    };   /* (MAKU_VBTN's, and PLAY) */
     uint32_t i, k, nh = 0, fresh, thin;
     int32_t m;
     for (i = 0; i < NELEM(V); i++)
@@ -1152,9 +1195,8 @@ static void maku_buttons(uint32_t pressed, uint32_t notes)
             if ((nh >> V[i].v) & 1u)
                 maku.verb = V[i].v;
     }
-    maku.brk = (uint8_t)((nh >> VB_SINK) & 1u);
-    thin = ((uint32_t)maku.vp[VB_LIFT][2] * (uint32_t)maku.va[VB_LIFT]) >> 12;   /* LIFT's THIN: the master's high-pass up; the space DRIFT added darkens its low-pass */
-    m = (int32_t)(thin * 60u / 127u) - (int32_t)maku.drs * 40 / 127;
+    thin = maku_vamt(VB_LIFT, 2);                         /* LIFT's THIN: the master's high-pass up; the space DRIFT added darkens its low-pass */
+    m = (int32_t)(thin * 100u / 127u) - (int32_t)maku.drs * 40 / 127;
     perf_k[0] = (int8_t)clamp(m, -100, 100);
     for (k = 0; k < 27u; k++)                             /* the keys always melt into the field (not the kick's grid: its keys are steps) */
         if (((notes >> k) & 1u) && !maku_kick_grid())
@@ -1391,11 +1433,13 @@ static void ui_input(void)
     if (home == BT_TAP)                                 /* HOME acts on release: a hold opens the menu */
         go_home();
     cursor_fix();                                       /* LEN may have changed (knob, editor, load) */
+    if (maku_knobs_on())
+        maku_voice_swap();                              /* (DRIFT: a part at its rest takes another voice) */
     if (maku_knobs_on()) {                              /* the verbs; of the buttons below only OCT- / OCT+ are still handled here: MAKU makes them the circle of fifths */
         if (!lay)
             maku_buttons(pressed, notes);
         else
-            maku.hv = maku.verb = maku.brk = 0;         /* (the tempo or the key (SEQ, ARP) is up: no verb is held) */
+            maku.hv = maku.verb = 0;                    /* (the tempo or the key (SEQ, ARP) is up: no verb is held) */
         pressed &= (1u << panel.btn[B_OCTDN]) | (1u << panel.btn[B_OCTUP]);
         ui.pg_down = 0;
     }

@@ -24,6 +24,13 @@ static uint16_t mk_col(uint32_t i)
     return settings.palette == UI_BW_INDEX ? T_THEME : C[i & 3u];
 }
 
+/* the same for a text: in GREY a text is gray by its brightness (the red and the yellow white, the green and the blue dim), so
+ * there it takes the theme's, as in MONO; the bars, gauges and waveform keep the colour */
+static uint16_t mk_ink(uint32_t i)
+{
+    return ux.mono ? T_THEME : mk_col(i);
+}
+
 /* a toward b by pct %, per channel (ux_mix would gray it in GREY) */
 static uint16_t mk_mix(uint16_t a, uint16_t b, int32_t pct)
 {
@@ -45,17 +52,18 @@ static void mq_macro(uint32_t j, uint32_t f, uint32_t tempo)
     char b[8];
     const char *name = tempo ? "BPM" : MAKU_MAC[f][j].name;
     int32_t v = tempo ? song.g[G_BPM] : maku.m[f][j];
-    uint16_t cc = mk_col(f), c = ui.hot_t && ui.hot_col == j ? T_ACCENT : cc;
+    int32_t gray = !tempo && f == MAKU_KICK && j == 0 ? maku.bw * 75 / 32768 : 0;   /* DENSITY fades as the breath takes the kick (BREATH_PLAN) */
+    uint16_t cc = gray ? mk_mix(mk_col(f), T_BG, gray) : mk_col(f), c = gray ? mk_mix(mk_ink(f), T_BG, gray) : mk_ink(f);   /* (hot_col is a volume knob, not this macro) */
     cv_text(8, 6, &AF_S, MAKU_ROLE[j], T_DIM);          /* (the knob's name only: the track is in the top left) */
-    cv_text(8, 24, &AF_M, name, T_MID);
+    cv_text(8, 24, &AF_M, name, gray ? mk_mix(T_MID, T_BG, gray) : T_MID);
     fmt_int(b, v);
     cv_text_in(0, 48, MKQ, &AF_L, b, c, T_BG);
-    mq_gauge(8, 92, MKQ - 16, tempo ? (v - 40) * 127 / 200 : v, c);
+    mq_gauge(8, 92, MKQ - 16, tempo ? (v - 40) * 127 / 200 : v, cc);
     if (!tempo && f == MAKU_KICK && j == 0) {           /* the kick's 16 steps: set, ghost, the playhead */
         uint32_t m = maku_kick_mask(), g = maku_kick_ghosts(), i, ph = song.playing ? trk[MAKU_KICK].seq_idx % 16u : 0xFFu;
         for (i = 0; i < 16u; i++) {
             int32_t x = 5 + (int32_t)i * 7;
-            uint16_t col = (m >> i) & 1u ? cc : (g >> i) & 1u ? T_MID : T_LINE;
+            uint16_t col = (m >> i) & 1u ? cc : (g >> i) & 1u ? mk_mix(T_MID, T_BG, gray) : T_LINE;
             cv_rect(x, 104, 5, i == ph ? 12 : 8, i == ph ? T_ACCENT : col);
         }
     }
@@ -64,15 +72,15 @@ static void mq_macro(uint32_t j, uint32_t f, uint32_t tempo)
 /* the verbs that hold three parameters (maku.c VB_*): their names, as printed on the button where there is one */
 static const struct { const char *title, *name[3]; } MAKU_VB[VB_N] = {
     {"", {"", "", ""}},
-    {"SINK", {"SINK", "WASH", "HUSH"}},                 /* FX: the reverb feeds back, the sends rise, the kick steps out */
+    {"SINK", {"RISE BEATS", "HOLD BEATS", "FADE BEATS"}},                 /* FX: the reverb feeds back, the sends rise, the kick steps out */
     {"TEMPO", {"BPM", "SWING", "DUCK"}},                /* SEQ (the layer GLO) */
     {"KEY", {"ROOT", "SCALE", "REG"}},                  /* ARP (the layer SCL) */
-    {"SCRAMBLE", {"ARP", "KICK", "SWING"}},             /* GLO */
-    {"CASCADE", {"DENSE", "SPAN", "HARM"}},             /* SCL: the arp plays every step, octaves and a third above */
+    {"SCRAMBLE", {"RISE BEATS", "HOLD BEATS", "FADE BEATS"}},             /* GLO: the arp jumps and stutters, the kick's ghosts, a beat left out, swing */
+    {"CASCADE", {"RISE BEATS", "HOLD BEATS", "FADE BEATS"}},              /* SCL: the arp plays every step, octaves and a third above */
     {"DRIFT", {"RATE", "RANGE", "REACH"}},              /* PLAY (a tap switches it; its LED): the macros (from REACH 43 the space, from 86 the tempo) wander */
-    {"LIFT", {"TONE", "EDGE", "THIN"}},                 /* EDIT: brighter tone, a harder edge, a thinner master */
-    {"SWELL", {"ATTACK", "RELEASE", "STAY"}},           /* ENV: longer attacks and releases, the chords stay */
-    {"WOBBLE", {"RATE", "DEPTH", "PITCH"}},             /* LFO: the filter LFO faster and deeper (and chorus), a pitch wobble */
+    {"LIFT", {"RISE BEATS", "HOLD BEATS", "FADE BEATS"}},                 /* EDIT: brighter tone, a harder edge, a thinner master */
+    {"SWELL", {"RISE BEATS", "HOLD BEATS", "FADE BEATS"}},                /* ENV: the chords strike again, longer attacks and releases, the chords stay */
+    {"WOBBLE", {"RISE BEATS", "HOLD BEATS", "FADE BEATS"}},               /* LFO: the filter LFO faster and deeper (and chorus), a pitch wobble */
 };
 static const char *const MAKU_REG[3] = {"LOW", "MID", "HIGH"};
 
@@ -80,6 +88,20 @@ static const char *const MAKU_REG[3] = {"LOW", "MID", "HIGH"};
 static int32_t maku_vb_value(uint32_t v, uint32_t j, char *b)
 {
     int32_t g = maku.vp[v][j], i;
+    if (maku_timed(v)) {                                /* RISE HOLD FADE: in beats (the bars follow the tempo) */
+        uint32_t u = maku_units(v, j), t10 = u * 10u / 16u;     /* (1/16 beats; tenths of a beat) */
+        if (!u)
+            str_cpy(b, "0", 8);
+        else if (t10 < 100u) {
+            fmt_int(b, (int32_t)(t10 / 10u));
+            i = (int32_t)str_len(b);
+            b[i] = '.';
+            b[i + 1] = (char)('0' + t10 % 10u);
+            b[i + 2] = 0;
+        } else
+            fmt_int(b, (int32_t)(t10 / 10u));
+        return maku.vt[v][j];
+    }
     if (v == VB_GLO && j == 0u) {
         fmt_int(b, song.g[G_BPM]);
         return (song.g[G_BPM] - 40) * 127 / 200;
@@ -152,7 +174,7 @@ static void mq_top_left(void)
         if (ui.msg_t)                                   /* (the small face: a message may be long) */
             cv_text(6, 8, &AF_S, ui.msg, T_ACCENT);
         else
-            cv_text(6, 4, &AF_M, t, mk_col(f));
+            cv_text(6, 4, &AF_M, t, mk_ink(f));
     }
     {                                                   /* the key, whatever else the screen shows, on BPM's line */
         char k[16];
@@ -173,7 +195,7 @@ static void mq_top_left(void)
         uint16_t cc = mk_col(i), c = i == f ? (ui.hot_t && ui.hot_col == i ? T_ACCENT : cc) : mk_mix(cc, T_BG, 55);
         cv_rect(bx, 64, 25, bh, T_LINE);
         cv_rect(bx, 64 + bh - h, 25, h, c);
-        cv_text(bx + (25 - text_w(&AF_S, MAKU_NUM[i])) / 2, 104, &AF_S, MAKU_NUM[i], i == f ? cc : T_MID);
+        cv_text(bx + (25 - text_w(&AF_S, MAKU_NUM[i])) / 2, 104, &AF_S, MAKU_NUM[i], i == f ? mk_ink(i) : T_MID);
         if (i == f)
             cv_rect(bx, 116, 25, 2, cc);
     }
@@ -184,9 +206,9 @@ static void maku_draw(void)
 {
     static uint32_t sig;
     uint32_t j, f = song.sel < 4u ? song.sel : 0u, v = ui.layer == LAYER_GLO ? VB_GLO : ui.layer == LAYER_SCL ? VB_ROOT : (uint32_t)maku.verb, s;
-    s = f * 977u + v * 13u + (uint32_t)maku.dr_tog * 5u + (uint32_t)song.g[G_BPM] * 31u + (uint32_t)(ui.hot_t != 0u) * 7u + ui.hot_col;
+    s = f * 977u + v * 13u + (uint32_t)maku.dr_tog * 5u + (uint32_t)song.g[G_BPM] * 31u + (uint32_t)(ui.hot_t != 0u) * 7u + ui.hot_col + (uint32_t)(maku.bw >> 9) * 977u;   /* (the fading DENSITY) */
     for (j = 0; j < 3u; j++)
-        s = s * 31u + maku.m[f][j] + (v ? (uint32_t)maku.vp[v][j] * 7u : 0u);
+        s = s * 31u + maku.m[f][j] + (v ? (uint32_t)(maku_timed(v) ? maku.vt[v][j] : maku.vp[v][j]) * 7u : 0u);
     s = s * 31u + (uint32_t)trk[MAKU_DRA].p[P_ROOT] * 17u + (uint32_t)trk[MAKU_DRA].p[P_SCALE];
     s = s * 31u + (uint32_t)maku_kick_mask() + (song.playing ? trk[MAKU_KICK].seq_idx % 16u + 1u : 0u) * 4099u +
         maku_kick_ghosts() * 7u;

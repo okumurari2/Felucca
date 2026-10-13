@@ -203,9 +203,21 @@ static inline void master_out(int32_t *l, int32_t *r)
 /* length of one division (N_DIV order) in samples at the song tempo */
 static const uint8_t DIV_DEN[6] = {1, 2, 4, 8, 3, 6};    /* original IDs stay fixed; slow rates append */
 static uint32_t midi_beat_samples;                    /* zero until an external clock has a measured tempo */
+/* The breath slope (docs/BREATH_PLAN.md 1): below 70 the BPM value bends into an effective tempo, e = v * (1/3)^(x^2),
+ * x = (70 - v) / 30, in 1/16 BPM for v = 40..69 (70 and up: v itself, with the slope's slope: no step, no kink). */
+static const uint16_t BREATH_E16[30] = {
+    213, 235, 258, 283, 308, 336, 364, 394, 425, 458,
+    491, 525, 560, 596, 632, 669, 705, 742, 778, 814,
+    850, 884, 917, 949, 980, 1009, 1036, 1060, 1083, 1103,
+};
+static uint32_t bpm_beat_samples(void)               /* the song tempo's beat, whatever an external clock does */
+{
+    uint32_t v = (uint32_t)song.g[G_BPM], e16 = v >= 70u ? v * 16u : v < 40u ? BREATH_E16[0] : BREATH_E16[v - 40u];
+    return (uint32_t)FS * 960u / e16;
+}
 static uint32_t beat_samples(void)
 {
-    return song.g[G_CLOCK] && midi_beat_samples ? midi_beat_samples : (uint32_t)FS * 60u / (uint32_t)song.g[G_BPM];
+    return song.g[G_CLOCK] && midi_beat_samples ? midi_beat_samples : bpm_beat_samples();
 }
 static uint32_t div_samples(uint32_t div)
 {
@@ -234,7 +246,7 @@ static __attribute__((noinline)) void rev_room(const int32_t *rev_in, int32_t *o
     int32_t size = 25000 + song.g[G_RSIZE] * 50, damp = 32767 - song.g[G_RDAMP] * 200;
     int32_t m[4] = {0, 0, 0, 0}, mf[4] = {0, 0, 0, 0};
     int32_t *outr = rev_rp, sk = maku_sink();
-    if (sk)                                             /* PLAY held (SINK): the combs feed back towards 0.99, the tail swallows */
+    if (sk)                                             /* FX held (SINK): the combs feed back towards 0.995, the tail swallows */
         size += ((32620 - size) * sk) >> 12;
     fx.rv_ph += 2u * LFO_INC[18];                       /* ~0.5 Hz, per block */
     m[1] = ((osc_sine(fx.rv_ph) + 32768) * 9) >> 8;     /* 0 .. 8 samples, Q8 */
@@ -288,7 +300,7 @@ static __attribute__((noinline)) void rev_spring(const int32_t *rev_in, int32_t 
     uint32_t i, k, s = (uint32_t)song.g[G_RSIZE];
     int32_t g = 19661 + (int32_t)s * 85;                /* the loop's gain: 0.6 .. 0.93 */
     int32_t sk = maku_sink();
-    if (sk)                                             /* PLAY held (SINK): towards 0.985 */
+    if (sk)                                             /* FX held (SINK): towards 0.99 */
         g += ((32500 - g) * sk) >> 12;
     int32_t kl = 26000 - song.g[G_RDAMP] * 160;         /* its low-pass: ~9 kHz .. ~1.3 kHz */
     int32_t len = (int32_t)(1323u + ((s * 1323u) >> 7)) << 8, L, L2, L3, f, w;
