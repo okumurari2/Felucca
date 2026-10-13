@@ -1187,6 +1187,7 @@ static void maku_setup(void)
     maku_macro_set(MAKU_ARP, 0, 0);
     song.g[G_BPM] = 72;
     maku.on = 1;
+    fx_deess = 1;                                      /* (the master's high-band compressor, fx.c: MAKU only) */
     maku.hv = maku.verb = 0;                           /* (the verbs held, and the drones' last steps SWELL replays) */
     maku.pp = maku.rst = 0;
     memset(maku.va, 0, sizeof maku.va);
