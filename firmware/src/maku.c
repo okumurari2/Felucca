@@ -120,6 +120,12 @@ static const struct { uint8_t rlo, rhi, dlo, dhi; } MAKU_PM[PM_N] = {
     {10, 40, 30, 100},           /* SWAY: RAND up to 40 (+-1.2 semitones) */
 };
 #define MAKU_ENGI_GRAIN 8u
+#define MAKU_ENGI_PHASE 2u       /* (engines.c order) the engines of the catalog's later rows */
+#define MAKU_ENGI_LOFI 3u
+#define MAKU_ENGI_VOICE 5u
+#define MAKU_ENGI_TRIO 6u
+#define MAKU_ENGI_WHEEL 7u
+#define MAKU_ENGI_NOISE 11u
 static step_t maku_cur[4];       /* the step each track played last (seq_ratchet repeats it) */
 
 /* How far each upper verb goes at full (the three numbers of vp): the verbs have no knob for it, only for their times. By ear:
@@ -356,13 +362,17 @@ static const struct { const char *name; mm_t m[MAKU_NM]; } MAKU_MAC[4][3] = {
     },
 };
 
-static mm_t maku_tone[4][3];
-/* the TONE macro's entry that is the brightness of track i's engine: PHYS BRIT, ANALOG CUT, GRAIN TONE (the ones a veil closes) */
+static mm_t maku_tone[4][3];         /* each track's TONE macro (j = 1): MAKU_MAC's, or the voice's own (maku_voices.c) */
+static mm_t maku_mac0[4][3];         /* each track's first macro (j = 0): MAKU_MAC's, or the voice's own (the haze's GRAIN macro is GRAIN's; another engine has its own) */
+/* the TONE macro's entry that is the brightness of track i's engine: PHYS BRIT, ANALOG CUT, GRAIN TONE, and for the engines the
+ * catalog's later rows use WHEEL TOP, VOICE BUZZ, NOISE FREQ, PHASE DCW, TRIO CUT, LOFI TONE (the ones a veil closes) */
 static uint32_t maku_is_bright(uint32_t i, uint32_t p)
 {
     uint32_t e = trk[i].eng_req;
-    return (e == ENGI_PHYS && p == P_E2) || (e == MAKU_ENGI_GRAIN && p == P_E7) || (e == 0u && p == P_E4);
-}         /* each track's TONE macro (j = 1): MAKU_MAC's, or the voice's own (maku_voices.c) */
+    return (e == ENGI_PHYS && p == P_E2) || (e == MAKU_ENGI_GRAIN && p == P_E7) || (e == 0u && p == P_E4) ||
+           (e == MAKU_ENGI_WHEEL && p == P_E3) || (e == MAKU_ENGI_VOICE && p == P_E4) || (e == MAKU_ENGI_NOISE && p == P_E2) ||
+           (e == MAKU_ENGI_PHASE && p == P_E2) || (e == MAKU_ENGI_TRIO && p == P_E5) || (e == MAKU_ENGI_LOFI && p == P_E7);
+}
 static void maku_set_density(uint32_t d);
 /* macro j of track i to v (0..127): stored, and every parameter it owns moves */
 static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
@@ -375,7 +385,7 @@ static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
     if (j == 1u)                                     /* LIFT: every track's TONE, a way up to the top (TONE 127 and full: all the way) */
         v += ((127u - v) * maku_vamt(VB_LIFT, 0)) / 127u;
     for (n = 0; n < (j == 2u ? MAKU_NM : 3u); n++) {
-        const mm_t *e = j == 1u ? &maku_tone[i][n] : &MAKU_MAC[i][j].m[n];
+        const mm_t *e = j == 1u ? &maku_tone[i][n] : j == 0u ? &maku_mac0[i][n] : &MAKU_MAC[i][j].m[n];
         int32_t lo = e->lo, hi = e->hi;
         uint32_t vv = v;
         if (e->p == MM_NONE)

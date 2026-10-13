@@ -1125,8 +1125,10 @@ static void maku_sound(uint32_t i, uint32_t eng, uint32_t pre)
     uint32_t k;
     maku.art[i] = ART_STRK;                   /* (the catalog row sets these: maku_voice_apply) */
     maku.voice[i] = 0xFFu;
-    for (k = 0; k < 3u; k++)
+    for (k = 0; k < 3u; k++) {
         maku_tone[i][k] = MAKU_MAC[i][1].m[k];
+        maku_mac0[i][k] = MAKU_MAC[i][0].m[k];
+    }
     set_engine_of(t, eng);
     if (eng != ENGI_DRUM)
         apply_preset_to(t, pre);
