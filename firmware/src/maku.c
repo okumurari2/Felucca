@@ -102,6 +102,9 @@ static struct {
     int32_t bb;                  /* the breath envelope b(t), Q15 (0 empty .. 32768 full); maku_breath_env */
     int32_t bd;                  /* the drones' dip from it, Q12 (0: none): the DEPTH of the breath */
     int32_t duck;                /* the kick's dip of the other tracks' level, Q12 (4096: none); it recovers in maku_block */
+    uint16_t vl[4];              /* the veil on a new voice's brightness (maku_macro_set): 0 dark .. 65535 open. A voice that has just come in (a new world, DRIFT's
+                                  * change) starts darker and opens by itself, so the first strikes do not startle; once open, the player's TONE is untouched */
+    uint8_t vs[4];               /* .. how fast it opens, per block (maku_block) */
     uint8_t pm[4];               /* how far each part's pitch may waver (PM_*; the floor and the haze, drawn per world) */
 } maku;
 
@@ -353,7 +356,13 @@ static const struct { const char *name; mm_t m[MAKU_NM]; } MAKU_MAC[4][3] = {
     },
 };
 
-static mm_t maku_tone[4][3];         /* each track's TONE macro (j = 1): MAKU_MAC's, or the voice's own (maku_voices.c) */
+static mm_t maku_tone[4][3];
+/* the TONE macro's entry that is the brightness of track i's engine: PHYS BRIT, ANALOG CUT, GRAIN TONE (the ones a veil closes) */
+static uint32_t maku_is_bright(uint32_t i, uint32_t p)
+{
+    uint32_t e = trk[i].eng_req;
+    return (e == ENGI_PHYS && p == P_E2) || (e == MAKU_ENGI_GRAIN && p == P_E7) || (e == 0u && p == P_E4);
+}         /* each track's TONE macro (j = 1): MAKU_MAC's, or the voice's own (maku_voices.c) */
 static void maku_set_density(uint32_t d);
 /* macro j of track i to v (0..127): stored, and every parameter it owns moves */
 static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
@@ -368,8 +377,11 @@ static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
     for (n = 0; n < (j == 2u ? MAKU_NM : 3u); n++) {
         const mm_t *e = j == 1u ? &maku_tone[i][n] : &MAKU_MAC[i][j].m[n];
         int32_t lo = e->lo, hi = e->hi;
+        uint32_t vv = v;
         if (e->p == MM_NONE)
             continue;
+        if (j == 1u && maku.vl[i] != 0xFFFFu && maku_is_bright(i, e->p))   /* (a new voice's veil: it opens within seconds) */
+            vv = (v * ((uint32_t)maku.vl[i] + 1u)) >> 16;
         if (maku_held(i) && (e->p == P_ATK || e->p == P_REL)) {   /* a held part: ATK / REL move around the voice's own */
             lo = (e->p == P_ATK ? maku.atk0[i] : maku.rel0[i]) - 12;
             hi = lo + 24;
@@ -385,7 +397,7 @@ static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
                 hi = MAKU_PM[maku.pm[i]].dhi;
             }
         }
-        trk[i].p[e->p] = (int16_t)(lo + ((hi - lo) * (int32_t)v + (hi >= lo ? 63 : -63)) / 127);
+        trk[i].p[e->p] = (int16_t)(lo + ((hi - lo) * (int32_t)vv + (hi >= lo ? 63 : -63)) / 127);
     }
     if (i == MAKU_DRB && j == 2)
         fx_rvs = (uint8_t)(v < 20u ? 0u : (v - 20u) * 90u / 107u);   /* AIR: the reverse swell comes in above ~20 */
@@ -979,6 +991,11 @@ static __attribute__((noinline)) void maku_block(void)
         maku.rst = 3u;
     maku.pp = maku.hv;
     maku_drift();
+    for (i = 1; i < 4u; i++)                                       /* a new voice's veil opens (maku_macro_set) */
+        if (maku.vl[i] != 0xFFFFu) {
+            maku.vl[i] = (uint16_t)(maku.vl[i] + maku.vs[i] > 0xFFFFu ? 0xFFFFu : maku.vl[i] + maku.vs[i]);
+            maku_macro_set(i, 1, maku.m[i][1]);
+        }
     if (maku.va[VB_LIFT] || maku.tw_q) {                           /* LIFT: every track's TONE macro moves together */
         maku.tw_q = maku.va[VB_LIFT];
         for (i = 0; i < 4u; i++)

@@ -1858,6 +1858,36 @@ static int pitch_levels(void)
         maku_fav.n = 0;
         bad += check("  a like keeps the levels (in the blob too); one kept before them plays as WARP (RAND 100 at TONE 127)", ok);
     }
+    {   /* a new voice's veil: its brightness starts under the TONE macro's own and opens by itself to it, no more */
+        uint32_t ok = 1, below = 0, k, i, bp[4];
+        int32_t v0[4];
+        for (s = 1; s <= 300u; s++) {
+            start(64);
+            maku_world(s * 3266489917u + 5u);
+            for (i = MAKU_DRA; i <= MAKU_ARP; i++) {
+                bp[i] = 0;
+                for (k = 0; k < 3u; k++)
+                    if (maku_tone[i][k].p != MM_NONE && maku_is_bright(i, maku_tone[i][k].p))
+                        bp[i] = maku_tone[i][k].p;
+                v0[i] = bp[i] ? trk[i].p[bp[i]] : 0;
+            }
+            for (k = 0; k < 40000u && (maku.vl[1] != 0xFFFFu || maku.vl[2] != 0xFFFFu || maku.vl[3] != 0xFFFFu); k++)
+                maku_block();
+            ok &= k > 1000u && k < 40000u;                               /* it takes seconds, and it ends */
+            for (i = MAKU_DRA; i <= MAKU_ARP; i++) {
+                int32_t v1;
+                if (!bp[i])
+                    continue;
+                v1 = trk[i].p[bp[i]];
+                ok &= v0[i] <= v1;
+                below += v0[i] < v1;
+                maku_macro_set(i, 1, maku.m[i][1]);
+                ok &= trk[i].p[bp[i]] == v1;                             /* (and once open it is the macro's own again) */
+            }
+        }
+        printf("ui:   %u brightness veils over 300 worlds started below the macro's own\n", below);
+        bad += check("VEIL: a new voice's brightness starts under its TONE macro's and opens to exactly it in seconds", ok && below > 100u);
+    }
     return bad;
 }
 
