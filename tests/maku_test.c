@@ -1414,6 +1414,75 @@ static int catalog(void)
     return bad;
 }
 
+/* DRIFT changes a voice now and then (maku_voice_swap, docs/AMBIENT.md): with it on, a part comes to its rest, takes another row of its own
+ * kind, and the world's rules hold; with it off, nothing changes. The timer is cut to ~0.2 s so a run sees many changes */
+static int drift_voices(void)
+{
+    int bad = 0;
+    int32_t o[2u * CTL];
+    uint32_t w, b, i, nb = 24u * BAR_STEPS * step_blocks() / 4u, changes = 0, kind_ok = 1, rule_ok = 1, keep_ok = 1, steals = 0, off_changes = 0, rows[4] = {0};
+    for (w = 1; w <= 12u; w++) {
+        uint8_t row0[4], held0[4];
+        int16_t rev0[4], dly0[4], it0[4], key0, scale0, kick0[P_E0];
+        start(127);
+        maku_world(w * 7919u);
+        for (i = 0; i < NTRK; i++)
+            trk[i].engine = trk[i].eng_req;
+        for (i = 0; i < NTRK; i++) {
+            row0[i] = maku.voice[i];
+            held0[i] = (uint8_t)maku_held(i);
+            rev0[i] = trk[i].p[P_SDIV];
+            dly0[i] = trk[i].p[P_SLEN];
+            it0[i] = trk[i].p[P_ITYPE];
+        }
+        key0 = trk[MAKU_DRA].p[P_ROOT];
+        scale0 = trk[MAKU_DRA].p[P_SCALE];
+        memcpy(kick0, trk[MAKU_KICK].p, sizeof kick0);
+        for (b = 0; b < nb; b++) {                  /* DRIFT off: the voices stay */
+            memset(o, 0, sizeof o);
+            mix_block(o, CTL);
+            maku_voice_swap();
+        }
+        for (i = 0; i < NTRK; i++)
+            off_changes += maku.voice[i] != row0[i];
+        maku.dr_tog = 1;
+        for (b = 0; b < nb; b++) {
+            uint32_t k0 = voice_kills, bows = 0, before[4];
+            for (i = 0; i < NTRK; i++)
+                before[i] = maku.voice[i];
+            if (maku.dr_on && maku.sw_at > 300u)
+                maku.sw_at = 300u;
+            memset(o, 0, sizeof o);
+            mix_block(o, CTL);
+            maku_voice_swap();
+            steals += voice_kills - k0;
+            for (i = 1; i < 4u; i++) {
+                const maku_voice_t *v = &MAKU_V[i].v[maku.voice[i]];
+                bows += v->art == ART_BOW && v->eng == ENGI_PHYS;
+                if (maku.voice[i] != before[i]) {
+                    changes++;
+                    rows[i]++;
+                }
+            }
+            rule_ok &= bows <= 1u && (maku_held(MAKU_DRA) || maku_held(MAKU_DRB));
+            for (i = 0; i < NTRK; i++)
+                kind_ok &= maku_held(i) == held0[i];
+        }
+        for (i = 0; i < NTRK; i++)
+            keep_ok &= trk[i].p[P_SDIV] == rev0[i] && trk[i].p[P_SLEN] == dly0[i] && trk[i].p[P_ITYPE] == it0[i];
+        keep_ok &= trk[MAKU_DRA].p[P_ROOT] == key0 && trk[MAKU_DRA].p[P_SCALE] == scale0 && maku.voice[MAKU_KICK] == row0[MAKU_KICK];
+        maku.dr_tog = 0;
+        maku_drift();
+    }
+    printf("ui:   drift voices, 12 worlds: %u changes (floor %u, haze %u, arp %u), %u with DRIFT off, steals %u\n", changes, rows[1], rows[2], rows[3], off_changes, steals);
+    bad += check("DRIFT VOICES: off, no voice changes", off_changes == 0u);
+    bad += check("DRIFT VOICES: on, the floor, the haze and the arp all change voice over time", rows[1] > 3u && rows[2] > 3u && rows[3] > 3u);
+    bad += check("DRIFT VOICES: a part keeps its kind (held or struck) and so one of floor / haze always holds; never a second PHYS bowed sound", kind_ok && rule_ok);
+    bad += check("DRIFT VOICES: step length and division, INSERT type, key and scale stay; the kick is untouched", keep_ok);
+    bad += check("DRIFT VOICES: no voice is taken from another part", steals == 0u);
+    return bad;
+}
+
 #include <time.h>
 /* host CPU cost of the whole device (not a pass / fail: the hardware's cost is read off the ratios; see docs/AMBIENT.md) */
 static double bench_once(uint32_t seed, uint32_t density, uint32_t open, uint32_t verbs, uint32_t bars)
@@ -1794,7 +1863,7 @@ static int pitch_levels(void)
 
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + melt() + fifths() + verbs() + verbs2() + envelope() + strong() + screen() + worlds_voices() + catalog() + likes() + pitch_levels() + (getenv("MAKU_BENCH") ? bench() : 0);
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + melt() + fifths() + verbs() + verbs2() + envelope() + strong() + screen() + worlds_voices() + catalog() + drift_voices() + likes() + pitch_levels() + (getenv("MAKU_BENCH") ? bench() : 0);
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }

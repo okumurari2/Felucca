@@ -1197,6 +1197,7 @@ static void maku_setup(void)
     maku.dr_t = 0;
     maku.drs = 0;
     memset(maku.dra, 0, sizeof maku.dra);
+    maku.sw_want = maku.sw_go = maku.sw_last = 0;      /* (and its change of voice) */
     maku.tw_q = 0;
     memset(maku.ov, 0, sizeof maku.ov);
     maku.ovlive = 0;

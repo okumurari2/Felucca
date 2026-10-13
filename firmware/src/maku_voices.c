@@ -81,13 +81,12 @@ static struct { const maku_voice_t *v; uint8_t n; } MAKU_V[4] = {
     {MAKU_V_ARP, (uint8_t)NELEM(MAKU_V_ARP)},
 };
 
-/* track i plays catalog row r: the sound (maku_sound), then the articulation, the row's changes and its TONE macro */
-static void maku_voice_apply(uint32_t i, uint32_t r)
+/* track i plays catalog row r, its sound loaded: the articulation, the row's changes and its TONE macro */
+static void maku_voice_set(uint32_t i, uint32_t r)
 {
     const maku_voice_t *v = &MAKU_V[i].v[r];
     track_t *t = &trk[i];
     uint32_t k;
-    maku_sound(i, v->eng, v->pre);
     if (v->l)
         t->p[P_LEVEL] = (int16_t)(v->l - 1);
     maku.art[i] = v->art;
@@ -117,6 +116,13 @@ static void maku_voice_apply(uint32_t i, uint32_t r)
         if (v->t[k].p)
             maku_tone[i][k] = v->t[k];
 }
+/* track i plays catalog row r: the sound (maku_sound), then the rest */
+static void maku_voice_apply(uint32_t i, uint32_t r)
+{
+    const maku_voice_t *v = &MAKU_V[i].v[r];
+    maku_sound(i, v->eng, v->pre);
+    maku_voice_set(i, r);
+}
 
 /* a row of part i by weight among the articulations in `arts` (bit ART_*); `not_phys_bow`: no PHYS BOW row (a second
  * one would cost the CPU of another bowed model and its voices). Always returns a row. */
@@ -144,6 +150,56 @@ static uint32_t maku_voice_pick(uint32_t i, uint32_t arts, uint32_t not_phys_bow
 #define ARTS_ALL 0x1Fu
 #define ARTS_HELD ((1u << ART_SWEL) | (1u << ART_BOW) | (1u << ART_HOLD))
 #define ARTS_STRUCK ((1u << ART_STRK) | (1u << ART_SOFT))
+
+/* DRIFT's change of voice (docs/AMBIENT.md; the main loop, once a pass): a part that has come to its rest (maku_step sets sw_go) takes
+ * another row of its catalog, of its own kind (held or struck) and under the world's rule of no second PHYS bowed sound. Only the
+ * sound changes: what the world and the player set (level, sends, INSERT, key, pattern, the macros' places) stays, and the TONE and
+ * ATK / REL macros are put on the new voice. The old voice's last notes are let go (the engine switch fades), the next chord (note)
+ * is the new voice's. Quiet on purpose: no message */
+static void maku_voice_swap(void)
+{
+    uint32_t i, k, r = 0, arts, pb = 0;
+    int16_t keep[P_E0];
+    int32_t lv;
+    const maku_voice_t *v, *old;
+    track_t *t;
+    for (i = MAKU_DRA; i <= MAKU_ARP; i++)
+        if ((maku.sw_go >> i) & 1u)
+            break;
+    if (i > MAKU_ARP)
+        return;
+    maku.sw_go = (uint8_t)(maku.sw_go & ~(1u << i));
+    if (!maku.on || !maku.dr_tog || maku.voice[i] == 0xFFu)      /* (DRIFT was switched off meanwhile) */
+        return;
+    arts = maku_held(i) ? ARTS_HELD : ARTS_STRUCK;
+    for (k = MAKU_DRA; k <= MAKU_ARP; k++)
+        if (k != i && maku.voice[k] != 0xFFu) {
+            v = &MAKU_V[k].v[maku.voice[k]];
+            pb |= v->art == ART_BOW && v->eng == ENGI_PHYS;
+        }
+    for (k = 0; k < 8u && (r = maku_voice_pick(i, arts, pb)) == maku.voice[i]; k++)
+        ;
+    if (r == maku.voice[i])
+        return;
+    v = &MAKU_V[i].v[r];
+    old = &MAKU_V[i].v[maku.voice[i]];
+    t = &trk[i];
+    memcpy(keep, t->p, sizeof keep);
+    maku.art[i] = ART_STRK;                            /* (as maku_sound begins) */
+    for (k = 0; k < 3u; k++)
+        maku_tone[i][k] = MAKU_MAC[i][1].m[k];
+    if (t->eng_req != v->eng)
+        set_engine_of(t, v->eng);
+    apply_preset_to(t, v->pre);
+    for (k = 0; k < P_E0; k++)                         /* everything but the envelope and the filter envelope, back as it was */
+        if (k != P_ATK && k != P_DEC && k != P_SUS && k != P_REL && k != P_ED_FLT)
+            t->p[k] = keep[k];
+    maku_voice_set(i, r);
+    lv = keep[P_LEVEL] + (v->l ? v->l - 1 : MAKU_R[i].lvl) - (old->l ? old->l - 1 : MAKU_R[i].lvl);   /* the level the player set, by what the rows differ */
+    t->p[P_LEVEL] = (int16_t)(lv < 0 ? 0 : lv > 127 ? 127 : lv);
+    for (k = 1; k < 3u; k++)
+        maku_macro_set(i, k, maku.m[i][k]);
+}
 
 /* the row of part i whose stable id is `id`; 0xFF: none (a like from a later catalog, or a broken one) */
 static uint32_t maku_voice_row(uint32_t i, uint32_t id)

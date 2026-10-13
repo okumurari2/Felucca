@@ -74,6 +74,9 @@ static struct {
     uint8_t drs;                 /* the space DRIFT has added (0..127): the sends rise and the master's low-pass closes; it stays when switched off */
     int16_t dra[16];             /* DRIFT's anchors, taken at the switch-on: the 12 macros, BPM, TEMPO's SWING and DUCK, drs */
     int16_t drw[16];             /* .. and what it last left there: a value found changed since was moved by hand, and is the new anchor */
+    uint32_t sw_t, sw_at;        /* DRIFT's change of voice: blocks counted, and the count at which the next part is asked to change (MAKU_SW_BLOCKS) */
+    uint8_t sw_want, sw_go;      /* .. bit i: part i is asked to change at its next rest (maku_step); it has reached it, the main loop changes it (maku_voice_swap) */
+    uint8_t sw_last;             /* .. the part changed last (never twice in a row) */
     uint8_t pk[MAKU_PK], pk_w[MAKU_PK], pk_av, pk_new;  /* the notes played, always melting into the arp phrase: pk_w the strength of each
                                   * (255 new, 0 gone; it fades), bit i of pk_av: pk[i] is outside the scale,
                                   * bit i of pk_new: not yet heard in the arp (the next arp step plays it for sure) */
@@ -570,6 +573,10 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
     uint32_t tie;
     memset(out, 0, sizeof *out);
     out->time = ST_NOTE;
+    if (((maku.sw_want >> i) & 1u) && (i == MAKU_DRA ? idx % 19u == 18u : i == MAKU_DRB ? idx == 6u : idx == MAKU_ARP_GAP)) {   /* DRIFT: the rest */
+        maku.sw_go = (uint8_t)(maku.sw_go | (1u << i));                                                                        /* before the next chord (note): change the voice now */
+        maku.sw_want = (uint8_t)(maku.sw_want & ~(1u << i));
+    }
     if ((i == MAKU_DRA || i == MAKU_DRB) && ((maku.rst >> (i - MAKU_DRA)) & 1u)) {   /* SWELL was pressed: the chord (the haze's last) again, now, */
         uint32_t c = i == MAKU_DRA ? 0u : maku.dlast;                              /* its attack long by then */
         maku.rst &= (uint8_t)~(1u << (i - MAKU_DRA));
@@ -763,6 +770,7 @@ static void maku_over(uint32_t slot, uint32_t t, uint32_t p, int32_t off, int32_
 /* DRIFT, once per block: while it is on the values it reaches wander, a step of the walk now and then, never further from where
  * they were at the switch-on than RANGE says (a value moved by hand meanwhile is the new place to stay near), and stay where they
  * land. REACH: the 12 macros; from 43 the space; from 86 the tempo, swing and duck too (the tempo only on its own clock) */
+#define MAKU_SW_BLOCKS 55000u   /* DRIFT changes the voice of one of the floor, the haze or the arp every 40 s (44.1 kHz, 32-sample blocks) and up to 20 s more */
 static int32_t maku_walk(int32_t v, int32_t a, int32_t span, int32_t top)
 {
     int32_t lo = a - span < 0 ? 0 : a - span, hi = a + span > top ? top : a + span;
@@ -797,6 +805,17 @@ static void maku_drift(void)
             maku.dra[k] = maku.drw[k] = (int16_t)maku_dr_get(k);
         maku.dr_on = 1;
         maku.dr_t = 0;
+        maku.sw_t = 0;
+        maku.sw_at = MAKU_SW_BLOCKS + rng() % (MAKU_SW_BLOCKS / 2u);
+    }
+    if (!maku.sw_want && !maku.sw_go && ++maku.sw_t >= maku.sw_at) {   /* a voice is due: one of the three, not the one changed last; it waits for its rest */
+        uint32_t p = 1u + rng() % 3u;
+        if (p == maku.sw_last)
+            p = 1u + p % 3u;
+        maku.sw_want = (uint8_t)(1u << p);
+        maku.sw_last = (uint8_t)p;
+        maku.sw_t = 0;
+        maku.sw_at = MAKU_SW_BLOCKS + rng() % (MAKU_SW_BLOCKS / 2u);
     }
     maku.dr_t = (uint16_t)(maku.dr_t + 1u + maku.vp[VB_DRIFT][0] / 8u);
     if (maku.dr_t < 64u)

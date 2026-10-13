@@ -1433,6 +1433,8 @@ static void ui_input(void)
     if (home == BT_TAP)                                 /* HOME acts on release: a hold opens the menu */
         go_home();
     cursor_fix();                                       /* LEN may have changed (knob, editor, load) */
+    if (maku_knobs_on())
+        maku_voice_swap();                              /* (DRIFT: a part at its rest takes another voice) */
     if (maku_knobs_on()) {                              /* the verbs; of the buttons below only OCT- / OCT+ are still handled here: MAKU makes them the circle of fifths */
         if (!lay)
             maku_buttons(pressed, notes);
