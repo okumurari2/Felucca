@@ -99,7 +99,7 @@ int main(void)
                      maku_dip(3000) == 4096 - (4096 - 3000));
         maku.bw = 32768;
         maku_breath_env();
-        bad += check("w = 1: the kick is gone, the verb halved, no ducking", maku_gain(MAKU_KICK) == 0 && maku_vamt(VB_SCRAM, 0) == 50 &&
+        bad += check("w = 1: the kick is a third of its level, the verb halved, no ducking", maku_gain(MAKU_KICK) > 1300 && maku_gain(MAKU_KICK) < 1500 && maku_vamt(VB_SCRAM, 0) == 50 &&
                      maku_dip(3000) == 4096);
         for (i = 0; i < len * 8u; i++) {
             int32_t ph;
@@ -127,6 +127,35 @@ int main(void)
         trk[MAKU_KICK].seq_pos = 0;
         maku_breath_env();
         bad += check("DEPTH 127 dips to .6 at the empty end", maku.bd > 2400 && maku.bd <= 2458);
+        {   /* the kick is a soft cue at the head of the bar, the floor is struck once a bar, regularly */
+            step_t st;
+            uint32_t n, hits = 0, soft = 1, bars = 0, floors = 0, even = 1, last_bar = 0, bar = 0;
+            maku.bw = 32768;
+            maku.dens = 100;
+            maku.open = 60;
+            for (n = 0; n < 16u * 6u; n++) {
+                trk[MAKU_KICK].seq_idx = (uint16_t)(n % 16u);
+                if (maku_step(MAKU_KICK, n % 16u, &st)) {
+                    hits++;
+                    soft &= (n % 16u) == 0 && st.vel == 44 && st.hit == 1;
+                }
+                if (maku_step(MAKU_DRA, n % 57u, &st)) {
+                    floors++;
+                    even &= (n % 16u) == 0 && (!bars || n - last_bar == 16u);
+                    last_bar = n;
+                    bars++;
+                }
+            }
+            bad += check("w = 1: the kick is one soft cue a bar (vel 44), at the head, whatever DENSITY", hits == 6 && soft);
+            bad += check("w = 1: the floor is struck once a bar, at the head, every 16 steps (not 19), whatever OPEN", floors == 6 && even);
+            maku.bw = 0;
+            floors = 0;
+            for (n = 0; n < 57u; n++) {
+                trk[MAKU_KICK].seq_idx = (uint16_t)(n % 16u);
+                floors += maku_step(MAKU_DRA, n, &st) != 0;
+            }
+            bad += check("w = 0: the floor still on its 19 steps", floors <= 3 && floors > 0);
+        }
         maku.on = 0;
     }
     return bad ? 1 : 0;
