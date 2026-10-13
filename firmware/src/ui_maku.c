@@ -52,9 +52,10 @@ static void mq_macro(uint32_t j, uint32_t f, uint32_t tempo)
     char b[8];
     const char *name = tempo ? "BPM" : MAKU_MAC[f][j].name;
     int32_t v = tempo ? song.g[G_BPM] : maku.m[f][j];
-    uint16_t cc = mk_col(f), c = mk_ink(f);             /* (hot_col is a volume knob, not this macro) */
+    int32_t gray = !tempo && f == MAKU_KICK && j == 0 ? maku.bw * 75 / 32768 : 0;   /* DENSITY fades as the breath takes the kick (BREATH_PLAN) */
+    uint16_t cc = gray ? mk_mix(mk_col(f), T_BG, gray) : mk_col(f), c = gray ? mk_mix(mk_ink(f), T_BG, gray) : mk_ink(f);   /* (hot_col is a volume knob, not this macro) */
     cv_text(8, 6, &AF_S, MAKU_ROLE[j], T_DIM);          /* (the knob's name only: the track is in the top left) */
-    cv_text(8, 24, &AF_M, name, T_MID);
+    cv_text(8, 24, &AF_M, name, gray ? mk_mix(T_MID, T_BG, gray) : T_MID);
     fmt_int(b, v);
     cv_text_in(0, 48, MKQ, &AF_L, b, c, T_BG);
     mq_gauge(8, 92, MKQ - 16, tempo ? (v - 40) * 127 / 200 : v, cc);
@@ -62,7 +63,7 @@ static void mq_macro(uint32_t j, uint32_t f, uint32_t tempo)
         uint32_t m = maku_kick_mask(), g = maku_kick_ghosts(), i, ph = song.playing ? trk[MAKU_KICK].seq_idx % 16u : 0xFFu;
         for (i = 0; i < 16u; i++) {
             int32_t x = 5 + (int32_t)i * 7;
-            uint16_t col = (m >> i) & 1u ? cc : (g >> i) & 1u ? T_MID : T_LINE;
+            uint16_t col = (m >> i) & 1u ? cc : (g >> i) & 1u ? mk_mix(T_MID, T_BG, gray) : T_LINE;
             cv_rect(x, 104, 5, i == ph ? 12 : 8, i == ph ? T_ACCENT : col);
         }
     }
@@ -205,7 +206,7 @@ static void maku_draw(void)
 {
     static uint32_t sig;
     uint32_t j, f = song.sel < 4u ? song.sel : 0u, v = ui.layer == LAYER_GLO ? VB_GLO : ui.layer == LAYER_SCL ? VB_ROOT : (uint32_t)maku.verb, s;
-    s = f * 977u + v * 13u + (uint32_t)maku.dr_tog * 5u + (uint32_t)song.g[G_BPM] * 31u + (uint32_t)(ui.hot_t != 0u) * 7u + ui.hot_col;
+    s = f * 977u + v * 13u + (uint32_t)maku.dr_tog * 5u + (uint32_t)song.g[G_BPM] * 31u + (uint32_t)(ui.hot_t != 0u) * 7u + ui.hot_col + (uint32_t)(maku.bw >> 9) * 977u;   /* (the fading DENSITY) */
     for (j = 0; j < 3u; j++)
         s = s * 31u + maku.m[f][j] + (v ? (uint32_t)(maku_timed(v) ? maku.vt[v][j] : maku.vp[v][j]) * 7u : 0u);
     s = s * 31u + (uint32_t)trk[MAKU_DRA].p[P_ROOT] * 17u + (uint32_t)trk[MAKU_DRA].p[P_SCALE];

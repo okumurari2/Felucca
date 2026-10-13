@@ -26,6 +26,7 @@
 #define MAKU_ARP_LEN 29u
 #define MAKU_ARP_GAP 24u         /* arp steps 24..28 are silent: the breath */
 #define MAKU_REST 255u
+#define MAKU_CUE_VEL 44u         /* the breath's cue (the kick, w > 1/2): soft */
 #define MAKU_TABLE 32u
 #define MAKU_PK 8u               /* the played notes the field remembers; a new one pushes out the weakest (the oldest) */
 
@@ -48,6 +49,7 @@ static struct {
     uint8_t run_left;            /* arp steps still to play from the table before it jumps */
     uint8_t pos;                 /* the place in the table */
     uint8_t cyc_a, cyc_b;        /* drone cycles done: the chord note rotates with them */
+    uint8_t bar_c;               /* the floor's chords struck at the head of a bar in the breath (three make a cycle) */
     uint16_t hv;                 /* the verbs held now, a bit each (VBIT) */
     uint8_t verb;                /* the one whose parameters the screen and the knobs have: the last pressed of those held (VB_NONE) */
     int16_t va[VB_N];            /* each verb's amount, Q12: RISE up while it is pressed, held for HOLD after it, FADE away (maku_env) */
@@ -590,6 +592,13 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         uint32_t hit = 0, oc, ol;
         if (idx >= 16u)
             return 0;
+        if (maku.bw > 16384) {                      /* the breath: the kick is a soft cue at the head of the bar (the inhale), nothing else */
+            if (idx)
+                return 0;
+            out->hit = 1;
+            out->vel = MAKU_CUE_VEL;
+            return 1;
+        }
         d = maku_kick_d(d);                         /* (the kick's own reach into DENSITY) */
         vel = 0;
         if ((maku_kick_mask() >> idx) & 1u) {       /* a step set by hand (the grid) always plays; DENSITY only adds ghosts */
@@ -624,7 +633,11 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         return 1;
     }
     case MAKU_DRA:
-        if (idx % 19u)
+        if (maku.bw > 16384) {                      /* the breath: the floor is struck once a bar, with the inhale (the kick track's step 0) */
+            if (trk[MAKU_KICK].seq_idx)
+                return 0;
+            idx = (maku.bar_c++ % 3u) * 19u;        /* (the chords go on in their order, three to a cycle) */
+        } else if (idx % 19u)
             return 0;
         if (!maku_held(i) && ((maku.dvalid >> 0) & 1u) && maku_stay()) {
             *out = maku.dc[0];                          /* SWELL: the struck chord stays (STAY: how surely) */
@@ -632,7 +645,7 @@ static __attribute__((noinline)) uint32_t maku_step(uint32_t i, uint32_t idx, st
         }
         if (idx == 0)
             maku.cyc_a++;
-        if (!maku_held(i) && maku_spare(i, 55u))        /* OPEN: a struck chord left out (a held one: stay_a) */
+        if (!maku_held(i) && maku.bw <= 16384 && maku_spare(i, 55u))   /* OPEN: a struck chord left out (a held one: stay_a) */
             return 0;
         {
             const uint8_t *c = MAKU_CHORD[(idx / 19u + 3u * maku.cyc_a) % 6u];   /* (3 a cycle: six chords in two cycles) */
@@ -1002,7 +1015,7 @@ static int32_t maku_gain(uint32_t i)
     if (!maku.on)
         return 4096;
     if (i == MAKU_KICK)
-        return (int32_t)((int64_t)maku.kfade * (32768 - maku.bw) >> 15);     /* the kick leaves with the breath (it still steps) */
+        return (int32_t)((int64_t)maku.kfade * (32768 - maku.bw * 65 / 100) >> 15);   /* the kick softens into the breath's cue (a third of its level) */
     return (i == MAKU_ARP ? 4096 - (4096 - maku.duck) / 2 : maku.duck) * (4096 - maku.bd) >> 12;
 }
 
