@@ -202,6 +202,10 @@ static void mq_top_left(void)
     cv_blit(0, 0);
 }
 
+#ifdef MK_STYLES
+#include "ui_maku_style.c"   /* the preview looks (web emulator only) */
+#endif
+
 static void maku_draw(void)
 {
     static uint32_t sig;
@@ -214,6 +218,14 @@ static void maku_draw(void)
         maku_kick_ghosts() * 7u;
     for (j = 0; j < 4u; j++)
         s = s * 31u + (uint32_t)trk[j].p[P_LEVEL];
+#ifdef MK_STYLES
+    s = s * 31u + mk_style;
+    if (mk_style) {
+        mks_draw(f, v, ui.force || s != sig);
+        sig = s;
+    } else
+#endif
+    {
     if (ui.force)
         lcd_fill(0, 0, 240, 240, T_BG);
     mq_top_left();
@@ -229,6 +241,7 @@ static void maku_draw(void)
         }
         lcd_fill(119, 0, 2, 240, T_LINE);
         lcd_fill(0, 119, 240, 2, T_LINE);
+    }
     }
     if (ui.msg_t && !--ui.msg_t && ui.msg2[0]) {
         str_cpy(ui.msg, ui.msg2, sizeof ui.msg);

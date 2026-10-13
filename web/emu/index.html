@@ -482,7 +482,7 @@ async function switchOn() {
           }
         }
       };
-      node.port.postMessage({ type: "load", wasm, sectors: loadFlash(), master: masterValue, seed: seedOpt }, [wasm]);
+      node.port.postMessage({ type: "load", wasm, sectors: loadFlash(), master: masterValue, seed: seedOpt, style: styleOpt }, [wasm]);
     });
     await resumed;
     await ac.resume();
@@ -503,6 +503,8 @@ async function switchOn() {
 
 const seedHash = /[#&]seed=(\d+)/.exec(location.hash);
 const seedOpt = seedHash ? (+seedHash[1] >>> 0) : 0;
+const styleHash = /[#&]style=(\d+)/.exec(location.hash);   // preview looks of the screen (ui_maku_style.c)
+const styleOpt = styleHash ? (+styleHash[1] >>> 0) : 0;
 document.getElementById("go").addEventListener("click", switchOn);
 document.addEventListener("visibilitychange", () => send({ type: "visible", on: !document.hidden }));
 </script>

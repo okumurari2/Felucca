@@ -56,6 +56,7 @@ if (typeof registerProcessor === "function") {
           restoreSectors(new Uint8Array(ex.memory.buffer, ex.web_nor(), ex.web_nor_size()), m.sectors);
           ex.web_master(m.master ?? 700);
           if (ex.web_set_seed) ex.web_set_seed(m.seed >>> 0 || (Math.random() * 4294967296) >>> 0);   // #seed=N: that world again
+          if (ex.web_set_style) ex.web_set_style(m.style >>> 0);   // #style=N: a preview look of the screen
           ex.web_boot();
           this.ex = ex;
           this.sentWrites = ex.web_flash_writes_count();
