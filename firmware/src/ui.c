@@ -1176,6 +1176,8 @@ static void maku_setup(void)
     maku.vp[VB_DRIFT][2] = 64;
     maku_vt_defaults();
     for (i = 0; i < NTRK; i++)
+        maku.vl[i] = 0xFFFFu;                          /* (no veil on the setup's own sound; a catalog voice brings its own) */
+    for (i = 0; i < NTRK; i++)
         maku_sound(i, MAKU_R[i].eng, MAKU_R[i].pre);
     trk[MAKU_DRA].p[P_LRATE] = 14;                    /* SWAY's very slow LFO on the drone's filter (~0.1 Hz: a 10 s turn) */
     for (i = 0; i < 4u; i++)
