@@ -1113,7 +1113,7 @@ static void apply_preset(uint32_t pi) { apply_preset_to(TSEL, pi); }
 /* MENU > MAKU ON (maku.c): the four tracks become KICK, DRONE (57 steps), DRONE (13) and ARP, each with a sound of its
  * own, patterns emptied (maku_step plays them), the key MINOR on C, the tempo 72. MAKU off leaves the sounds as they are */
 static const struct { uint8_t eng, pre, len, lvl, rev, dly; } MAKU_R[NTRK] = {
-    {ENGI_DRUM, 0, 16, 104, 30, 0},                    /* KICK: a long round one */
+    {ENGI_DRUM, 0, 16, 90, 30, 0},                  /* KICK: a long round one */
     {ENGI_PHYS, 7, MAKU_DRA_LEN, 90, 100, 20},         /* DRONE: PHYS DRONE STRING */
     {8, 0, MAKU_DRB_LEN, 76, 110, 30},                 /* SHIMMER: GRAIN CLOUD PAD */
     {ENGI_PHYS, 4, MAKU_ARP_LEN, 78, 85, 70},          /* ARP: PHYS KALIMBA, into the delay and the room */
