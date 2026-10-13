@@ -59,6 +59,8 @@ static void mq_macro(uint32_t j, uint32_t f, uint32_t tempo)
     fmt_int(b, v);
     cv_text_in(0, 48, MKQ, &AF_L, b, c, T_BG);
     mq_gauge(8, 92, MKQ - 16, tempo ? (v - 40) * 127 / 200 : v, cc);
+    if (!tempo && j == 1u && f != MAKU_KICK && maku.voice[f] != 0xFFu)   /* the sound this world gave the track: shown, not set (PRESETS is its TONE) */
+        cv_text(8, 102, &AF_S, MAKU_V[f].v[maku.voice[f]].name, T_DIM);
     if (!tempo && f == MAKU_KICK && j == 0) {           /* the kick's 16 steps: set, ghost, the playhead */
         uint32_t m = maku_kick_mask(), g = maku_kick_ghosts(), i, ph = song.playing ? trk[MAKU_KICK].seq_idx % 16u : 0xFFu;
         for (i = 0; i < 16u; i++) {
@@ -138,6 +140,11 @@ static void mq_verb(uint32_t j, uint32_t v)
     mq_gauge(8, 92, MKQ - 16, g, T_ACCENT);
 }
 
+/* a new world (power-on, HOME held, a like) names its kit once, after its message: the floor's, the haze's and the voice's sound,
+ * one after another in the track's colour (~0.75 s each), then the focused track again. DRIFT's change of voice stays quiet */
+#define MK_KIT_F 45u
+static uint16_t mk_kit_world, mk_kit_t;
+
 static void mq_top_left(void)
 {
     char b[8];
@@ -171,9 +178,25 @@ static void mq_top_left(void)
         str_cpy(t, MAKU_NUM[f], sizeof t);
         str_cpy(t + str_len(t), " ", sizeof t - str_len(t));
         str_cpy(t + str_len(t), MAKU_TRK_NAME[f], sizeof t - str_len(t));
+        if (mk_kit_world != maku.world_n) {
+            mk_kit_world = maku.world_n;
+            mk_kit_t = 3u * MK_KIT_F;
+        }
         if (ui.msg_t)                                   /* (the small face: a message may be long) */
             cv_text(6, 8, &AF_S, ui.msg, T_ACCENT);
-        else
+        else if (mk_kit_t) {                            /* the kit: "2 DRONE STRING", "3 RAIN", "4 KALIMBA" */
+            uint32_t k = MAKU_DRA + 2u - (mk_kit_t - 1u) / MK_KIT_F;
+            mk_kit_t--;
+            if (maku.voice[k] != 0xFFu) {
+                str_cpy(t, MAKU_NUM[k], sizeof t);
+                str_cpy(t + str_len(t), " ", sizeof t - str_len(t));
+                str_cpy(t + str_len(t), MAKU_V[k].v[maku.voice[k]].name, sizeof t - str_len(t));
+                if (text_w(&AF_M, t) <= MKQ - 12)
+                    cv_text(6, 4, &AF_M, t, mk_ink(k));
+                else
+                    cv_text(6, 8, &AF_S, t, mk_ink(k));
+            }
+        } else
             cv_text(6, 4, &AF_M, t, mk_ink(f));
     }
     {                                                   /* the key, whatever else the screen shows, on BPM's line */
@@ -209,6 +232,7 @@ static void maku_draw(void)
     s = f * 977u + v * 13u + (uint32_t)maku.dr_tog * 5u + (uint32_t)song.g[G_BPM] * 31u + (uint32_t)(ui.hot_t != 0u) * 7u + ui.hot_col + (uint32_t)(maku.bw >> 9) * 977u;   /* (the fading DENSITY) */
     for (j = 0; j < 3u; j++)
         s = s * 31u + maku.m[f][j] + (v ? (uint32_t)(maku_timed(v) ? maku.vt[v][j] : maku.vp[v][j]) * 7u : 0u);
+    s = s * 31u + maku.voice[f];                        /* (DRIFT's change of voice: its name in PRESETS) */
     s = s * 31u + (uint32_t)trk[MAKU_DRA].p[P_ROOT] * 17u + (uint32_t)trk[MAKU_DRA].p[P_SCALE];
     s = s * 31u + (uint32_t)maku_kick_mask() + (song.playing ? trk[MAKU_KICK].seq_idx % 16u + 1u : 0u) * 4099u +
         maku_kick_ghosts() * 7u;

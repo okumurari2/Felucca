@@ -970,10 +970,15 @@ static void maku_breath_env(void)
     const track_t *k = &trk[MAKU_KICK];
     uint32_t len = k->p[P_SLEN] > 0 ? (uint32_t)k->p[P_SLEN] : 16u, per = div_samples((uint32_t)k->p[P_SDIV]);
     uint32_t pos = k->seq_pos < per ? k->seq_pos : per, n = (k->seq_idx % len) * per + pos, d = (uint32_t)maku.vp[VB_GLO][2];
+    uint32_t tot = len * per;
     int32_t ex = maku.vp[VB_GLO][1], e, ph, amt;
     ex = 16384 + (ex <= 64 ? ex * 3277 / 64 : 3277 + (ex - 64) * 3276 / 63);    /* the exhale's share, Q15: .5 .6 .7 */
     e = 16384 + (int32_t)((int64_t)(ex - 16384) * maku.bw >> 15);
-    ph = per ? (int32_t)((uint64_t)n * 32768u / ((uint64_t)len * per)) : 0;
+    while (tot >= 65536u) {                              /* (n <= tot < 2^16: n * 32768 fits; no 64-bit divide, the target has none) */
+        tot >>= 1;
+        n >>= 1;
+    }
+    ph = tot ? (int32_t)(n * 32768u / tot) : 0;
     if (ph >= 32768 - e)                                 /* the exhale: down from full */
         maku.bb = 32768 - maku_smooth((ph - (32768 - e)) * 32768 / (e ? e : 1));
     else                                                 /* the inhale: up from empty */
