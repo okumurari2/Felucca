@@ -171,6 +171,17 @@ static inline int32_t spk_bass(int32_t m)
     return sb_hl + (sb_hl >> 1);      /* x1.5 (#180, Felucca 1.5: x3 peaked at 1.5 .. 3.5 x a full-scale kick, the limiter */
 }                                     /* pulled the mix down up to 16 dB on each hit and the buzz took over) */
 
+/* MANNER:speaker-shout. MAKU's high-band compressor (the small speaker's shout): the part of the mix above ~2.5 kHz (one pole) is followed (at once up, ~12 ms
+ * release, both channels together) and, past DS_T, only that part is turned down, 3:1. A bright voice that is loud stays loud
+ * in the low and the middle, and a quiet one is not touched. Measured on 60 worlds at MASTER full (that band at the
+ * output, 40 s each, before the compressor): its mean 110, its 99th percentile 500 (the loudest world 1100), the strikes' peak median 1600,
+ * top 4100. DS_T sits above the usual level and under the usual strike: the median world is untouched but for its strikes (~4 dB),
+ * a world that stays loud up there ~2.5 dB, its top strikes ~7 dB. Set by
+ * maku_setup (the song modes and the golden renders leave it off) */
+#define DS_T 700
+static volatile uint8_t fx_deess;
+static int32_t ds_lp_l, ds_lp_r, ds_env;
+
 static inline void master_out(int32_t *l, int32_t *r)
 {
     int32_t al, ar, a;
@@ -183,6 +194,25 @@ static inline void master_out(int32_t *l, int32_t *r)
         *l = lowcut1(*l, &lc_l2, &lce[1], sh) + b;
         *r = lowcut1(*r, &lc_r1, &lce[2], sh);
         *r = lowcut1(*r, &lc_r2, &lce[3], sh) + b;
+    }
+    if (fx_deess) {
+        int32_t hl, hr, e;
+        ds_lp_l += (clamp(*l - ds_lp_l, -131072, 131072) * 9800) >> 15;
+        ds_lp_r += (clamp(*r - ds_lp_r, -131072, 131072) * 9800) >> 15;
+        hl = *l - ds_lp_l;
+        hr = *r - ds_lp_r;
+        al = hl < 0 ? -hl : hl;
+        ar = hr < 0 ? -hr : hr;
+        e = al > ar ? al : ar;
+        if (e > ds_env)
+            ds_env = e;                                  /* (at once: the strikes are a few samples of this band) */
+        else if (ds_env > 0)
+            ds_env -= (ds_env >> 9) + 1;
+        if (ds_env > DS_T) {
+            int32_t g = (int32_t)(((uint32_t)(DS_T + (((ds_env - DS_T) * 43) >> 7)) << 15) / (uint32_t)ds_env);   /* < 32768 */
+            *l = ds_lp_l + (((hl >> 4) * g) >> 11);
+            *r = ds_lp_r + (((hr >> 4) * g) >> 11);
+        }
     }
     al = *l < 0 ? -*l : *l;
     ar = *r < 0 ? -*r : *r;

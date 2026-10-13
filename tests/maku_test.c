@@ -1858,6 +1858,61 @@ static int pitch_levels(void)
         maku_fav.n = 0;
         bad += check("  a like keeps the levels (in the blob too); one kept before them plays as WARP (RAND 100 at TONE 127)", ok);
     }
+    {   /* a new voice's veil: its brightness starts under the TONE macro's own and opens by itself to it, no more */
+        uint32_t ok = 1, below = 0, k, i, bp[4];
+        int32_t v0[4];
+        for (s = 1; s <= 300u; s++) {
+            start(64);
+            maku_world(s * 3266489917u + 5u);
+            for (i = MAKU_DRA; i <= MAKU_ARP; i++) {
+                bp[i] = 0;
+                for (k = 0; k < 3u; k++)
+                    if (maku_tone[i][k].p != MM_NONE && maku_is_bright(i, maku_tone[i][k].p))
+                        bp[i] = maku_tone[i][k].p;
+                v0[i] = bp[i] ? trk[i].p[bp[i]] : 0;
+            }
+            for (k = 0; k < 40000u && (maku.vl[1] != 0xFFFFu || maku.vl[2] != 0xFFFFu || maku.vl[3] != 0xFFFFu); k++)
+                maku_block();
+            ok &= k > 1000u && k < 40000u;                               /* it takes seconds, and it ends */
+            for (i = MAKU_DRA; i <= MAKU_ARP; i++) {
+                int32_t v1;
+                if (!bp[i])
+                    continue;
+                v1 = trk[i].p[bp[i]];
+                ok &= v0[i] <= v1;
+                below += v0[i] < v1;
+                maku_macro_set(i, 1, maku.m[i][1]);
+                ok &= trk[i].p[bp[i]] == v1;                             /* (and once open it is the macro's own again) */
+            }
+        }
+        printf("ui:   %u brightness veils over 300 worlds started below the macro's own\n", below);
+        bad += check("VEIL: a new voice's brightness starts under its TONE macro's and opens to exactly it in seconds", ok && below > 100u);
+    }
+    {   /* the master's high-band compressor (fx.c DS_T): a loud high tone comes down, a loud low one and a quiet high one do not */
+        static const double F[3] = {6000.0, 400.0, 6000.0}, A[3] = {9000.0, 9000.0, 300.0};
+        double g[3];
+        uint32_t i, n;
+        for (n = 0; n < 3u; n++) {
+            double in = 0, out = 0;
+            fx_deess = 1;
+            fx_lowcut = 0;
+            lc_l1 = lc_l2 = lc_r1 = lc_r2 = dc_l = dc_r = dce_l = dce_r = ds_lp_l = ds_lp_r = ds_env = 0;
+            lim_env = LIM_T;
+            for (i = 0; i < FS / 2u; i++) {
+                int32_t l = (int32_t)(A[n] * sin(2.0 * M_PI * F[n] * i / FS)), r = l;
+                master_out(&l, &r);
+                if (i >= FS / 4u) {
+                    in += A[n] * A[n] / 2.0;
+                    out += (double)l * l;
+                }
+            }
+            g[n] = 10.0 * log10(out / in + 1e-12);
+        }
+        fx_deess = 1;
+        printf("ui:   high-band compressor: 6 kHz at 9000 %.1f dB, 400 Hz at 9000 %.1f dB, 6 kHz at 300 %.1f dB\n", g[0], g[1], g[2]);
+        bad += check("DE-ESS: a loud 6 kHz tone is pulled down by 4 dB or more; a loud 400 Hz tone and a quiet 6 kHz tone stay within 1 dB",
+                     g[0] < -4.0 && g[1] > -1.0 && g[2] > -1.0);
+    }
     return bad;
 }
 

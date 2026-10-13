@@ -1178,6 +1178,8 @@ static void maku_setup(void)
     maku.vp[VB_DRIFT][2] = 64;
     maku_vt_defaults();
     for (i = 0; i < NTRK; i++)
+        maku.vl[i] = 0xFFFFu;                          /* (no veil on the setup's own sound; a catalog voice brings its own) */
+    for (i = 0; i < NTRK; i++)
         maku_sound(i, MAKU_R[i].eng, MAKU_R[i].pre);
     trk[MAKU_DRA].p[P_LRATE] = 14;                    /* SWAY's very slow LFO on the drone's filter (~0.1 Hz: a 10 s turn) */
     for (i = 0; i < 4u; i++)
@@ -1187,6 +1189,7 @@ static void maku_setup(void)
     maku_macro_set(MAKU_ARP, 0, 0);
     song.g[G_BPM] = 72;
     maku.on = 1;
+    fx_deess = 1;                                      /* (the master's high-band compressor, fx.c: MAKU only) */
     maku.hv = maku.verb = 0;                           /* (the verbs held, and the drones' last steps SWELL replays) */
     maku.pp = maku.rst = 0;
     memset(maku.va, 0, sizeof maku.va);

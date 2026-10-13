@@ -164,6 +164,7 @@ FM-1 は電池で動き、スピーカーが小さく、部品が安い機械。
 | `MANNER:rec-preerase` | **[必須] 押した瞬間に消去しない。** 書く側のコピーは、人が聞いていない時（電源オン前、新しい世界への切り替わり）に先に消しておく（`st_tidy`）。消去済み（全部0xFF）の区画への保存は消去を省く（`st_blank`）。REC は書き込み4回だけで音を止めない。前の掃除が間に合っていない時（新しい世界の前の2回目の REC）だけ、押した時に消去し、上の凹みで包む | `storage.c` `st_blank` / `st_tidy`、`project.c` `maku_fav_store` / `maku_fav_tidy` / `maku_fav_boot`、`ui.c` `maku_world_new` |
 | `MANNER:battery` | **[必須] 電池はふだん画面に出さない。** 左上は「いま」を出し続ける（1 章 5）ので常設アイコンは置かない。電池駆動で3本中1本以下になったら、メッセージ枠に BATTERY LOW（0本は BATTERY EMPTY）を約2秒。そのレベルが5秒続いてから、1本減ったら即、その後2分ごと。ほかのメッセージの上には出さない。USB ホストがつながっている間・最初の読み取りの前（エミュレーター）は出さない | `ui_input.c` `battery_notice`（`ui_notices` から）、しきい値は `ui_draw.c` `batt_level` |
 | `MANNER:leds-auto` | **[既定] LED は AUTO：電池なら DIM LO、USB ホストがあれば DIM HI。** 保存形式は追記のみ（DIM HI は `LEDS_TAG\|0`、AUTO は素の0。古いファームは AUTO を DIM HI と読む）。充電器だけ（ホストなし）は電池扱い | `panel.c`（モードと保存形式）、`ui_input.c` `leds_eff`、`main.c` `boot_leds` |
+| `MANNER:speaker-shout` | **[必須] 高域だけのピークを抑える。** 小スピーカーは高域の強い音（鈴・きらめき・明るい弓）が刺さる。2.5 kHz 以上の帯域だけを追い（上がりは即、戻りは約12 ms）、しきい値（DS_T）を超えた分だけ3:1で下げる。低域・中域は動かず、静かな音には何もしない。普通の世界では打つ瞬間だけ約4 dB、鳴りっぱなしで高域が強い世界はそのぶん、一番強い打ちは約7 dB 下がる。MAKU のときだけ有効（`maku_setup` が入れる） | `fx.c` `master_out` の `DS_T`、`ui.c` `maku_setup` |
 
 守り方：
 

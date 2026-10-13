@@ -21,6 +21,7 @@ typedef struct {
     uint8_t e[8];                /* P_E0..P_E7 over the preset's, +1 (0: keep) */
     mm_t t[3];                   /* the TONE macro of this sound: p 0 keeps the part's default entry, MM_NONE none */
     uint8_t l;                   /* the part's LEVEL over MAKU_R's, +1 (0: keep): evens out the loudness of the rows */
+    uint8_t br;                  /* a bright sound (not part of the catalog's meaning): it comes in darker and opens more slowly (maku_voice_set) */
     uint8_t id;                  /* the stable id (1..; unique in its part, never reused): what a like keeps */
     mm_t g[3];                   /* the first macro of this sound (the haze's GRAIN macro is GRAIN's): p 0 keeps the part's default entry */
 } maku_voice_t;
@@ -42,13 +43,13 @@ static const struct { uint8_t a, d, s, r; } MAKU_ART[] = {
 #define T_GRAIN {{P_E2, 30, 127}, {P_E7, 20, 127}, {0, 0, 0}}              /* SIZE, TONE */
 #define T_SOFT {{P_E2, 0, 110}, {P_E3, 127, 30}, {P_E5, 10, 100}}           /* BRIT, DAMP, ACC: a soft strike stays soft */
 #define T_ANALOG_LINE {{P_E4, 10, 127}, {P_E5, 0, 70}, {MM_NONE, 0, 0}}
-/* the engines Felucca had that the first catalog left out (engines.c order): a row names one by its number */
-#define E_PHASE 2u
-#define E_LOFI 3u
-#define E_VOICE 5u
-#define E_TRIO 6u
-#define E_WHEEL 7u
-#define E_NOISE 11u
+/* the engines Felucca had that the first catalog left out (maku.c MAKU_ENGI_*): a row names one by its number */
+#define E_PHASE MAKU_ENGI_PHASE
+#define E_LOFI MAKU_ENGI_LOFI
+#define E_VOICE MAKU_ENGI_VOICE
+#define E_TRIO MAKU_ENGI_TRIO
+#define E_WHEEL MAKU_ENGI_WHEEL
+#define E_NOISE MAKU_ENGI_NOISE
 #define T_WHEEL {{P_E3, -6, 4}, {P_E6, 0, 15}, {MM_NONE, 0, 0}}           /* TOP (the upper bars), DRV: an organ brightens, then growls a little (more bars are louder: stays short) */
 #define T_VOICE {{P_E0, 0, 64}, {P_E4, 30, 90}, {P_E5, 5, 50}}            /* VOWL (A towards I), BUZZ, BRTH: a vowel opens and brightens */
 #define T_NOISE {{P_E2, 40, 95}, {P_E3, 60, 105}, {P_E1, 20, 90}}         /* FREQ, RES, COLR: the band rises and narrows (not to a whistle) */
@@ -68,7 +69,7 @@ static const maku_voice_t MAKU_V_DRA[] = {          /* the floor */
     {"BOWED METAL", ENGI_PHYS, 3, ART_BOW, 3, .t = {{P_E2, 0, 127}, {P_E6, 30, 127}, {0, 0, 0}}, .id = 3},
     {"BOWED STRING", ENGI_PHYS, 2, ART_BOW, 2, V1(85), 0, 0, {0, 0, V1(50), V1(110), 0, 0, V1(70), 0},   /* the string model (the preset's), bowed */
         T_PHYS_BOW, .id = 4},
-    {"GLASS", ENGI_PHYS, 0, ART_BOW, 2, V1(95), 0, V1(105), {0, V1(34), V1(60), 0, 0, 0, V1(50), 0}, T_PHYS_BOW, .id = 5},
+    {"GLASS", ENGI_PHYS, 0, ART_BOW, 2, V1(95), 0, V1(105), {0, V1(34), V1(60), 0, 0, 0, V1(50), 0}, T_PHYS_BOW, .br = 1, .id = 5},
     {"SOFT PAD", 0, 1, ART_HOLD, 3, .t = T_ANALOG, .l = V1(LV_ANALOG), .id = 6},
     {"STRINGS", 0, 11, ART_HOLD, 2, .t = T_ANALOG, .l = V1(LV_ANALOG), .id = 7},
     {"PWM STR", 0, 3, ART_HOLD, 2, .t = T_ANALOG, .l = V1(LV_ANALOG), .id = 8},
@@ -89,32 +90,32 @@ static const maku_voice_t MAKU_V_DRA[] = {          /* the floor */
 static const maku_voice_t MAKU_V_DRB[] = {          /* the haze */
     {"CLOUD PAD", 8, 0, ART_SWEL, 3, V1(98), .id = 1},
     {"FROZEN", 8, 2, ART_SWEL, 2, V1(105), .id = 2},
-    {"SHIMMER", 8, 3, ART_SWEL, 2, V1(92), .id = 3},
-    {"GLASS HIGH", ENGI_PHYS, 0, ART_BOW, 2, V1(95), 0, V1(105), {0, V1(34), V1(60), 0, 0, 0, V1(50), 0}, T_PHYS_BOW, .id = 4},
-    {"SPARKLE", 8, 3, ART_STRK, 2, V1(20), .id = 5},
+    {"SHIMMER", 8, 3, ART_SWEL, 2, V1(92), .br = 1, .id = 3},
+    {"GLASS HIGH", ENGI_PHYS, 0, ART_BOW, 2, V1(95), 0, V1(105), {0, V1(34), V1(60), 0, 0, 0, V1(50), 0}, T_PHYS_BOW, .br = 1, .id = 4},
+    {"SPARKLE", 8, 3, ART_STRK, 2, V1(20), .br = 1, .id = 5},
     {"WHISPER", E_VOICE, 3, ART_SWEL, 3, .t = T_VOICE, .g = G_VOICE, .l = V1(57), .id = 6},
     {"AAH", E_VOICE, 0, ART_SWEL, 2, .t = T_VOICE, .g = G_VOICE, .l = V1(51), .id = 7},
     {"FLUTE ORGAN", E_WHEEL, 3, ART_SWEL, 2, .t = T_WHEEL, .g = G_WHEEL, .l = V1(66), .id = 8},
-    {"WIND", E_NOISE, 0, ART_SWEL, 2, .t = T_NOISE, .g = G_NOISE, .id = 9},
-    {"RAIN", E_NOISE, 1, ART_SWEL, 1, .t = T_NOISE, .g = G_NOISE, .l = V1(84), .id = 10},
-    {"PD BELLS", E_PHASE, 4, ART_STRK, 2, .t = T_PHASE, .g = G_PHASE, .id = 11},
+    {"WIND", E_NOISE, 0, ART_SWEL, 2, .t = T_NOISE, .g = G_NOISE, .br = 1, .id = 9},
+    {"RAIN", E_NOISE, 1, ART_SWEL, 1, .t = T_NOISE, .g = G_NOISE, .l = V1(84), .br = 1, .id = 10},
+    {"PD BELLS", E_PHASE, 4, ART_STRK, 2, .t = T_PHASE, .g = G_PHASE, .br = 1, .id = 11},
 };
 static const maku_voice_t MAKU_V_ARP[] = {          /* the voice */
-    {"KALIMBA", ENGI_PHYS, 4, ART_STRK, 2, .id = 1},
+    {"KALIMBA", ENGI_PHYS, 4, ART_STRK, 2, .br = 1, .id = 1},
     {"MARIMBA", ENGI_PHYS, 1, ART_STRK, 1, .id = 2},
     {"PLUCK", ENGI_PHYS, 2, ART_STRK, 1, .id = 3},
-    {"BELL TREE", ENGI_PHYS, 0, ART_STRK, 1, .id = 4},
-    {"HARP", ENGI_PHYS, 8, ART_STRK, 1, .id = 5},
+    {"BELL TREE", ENGI_PHYS, 0, ART_STRK, 1, .br = 1, .id = 4},
+    {"HARP", ENGI_PHYS, 8, ART_STRK, 1, .br = 1, .id = 5},
     {"FELT KALIMBA", ENGI_PHYS, 4, ART_SOFT, 2, 0, 0, V1(80), {0, 0, V1(8), 0, 0, V1(50), 0, V1(10)}, T_SOFT, .id = 6},
     {"FELT MARIMBA", ENGI_PHYS, 1, ART_SOFT, 2, V1(45), 0, V1(70), {0, 0, V1(25), 0, 0, V1(60), 0, V1(5)}, T_SOFT, .id = 7},
     {"SOFT HARP", ENGI_PHYS, 8, ART_SOFT, 1, V1(55), 0, V1(85), {0, 0, 0, 0, 0, V1(55), 0, 0}, T_SOFT, .id = 8},
     {"SINE LINE", 0, 5, ART_SWEL, 3, V1(90), V1(110), V1(95), {0}, T_ANALOG_LINE, .id = 9},
     {"BOWED LINE", ENGI_PHYS, 3, ART_BOW, 1, V1(75), 0, V1(95), {0}, T_PHYS_BOW, .id = 10},
     {"MUSIC BOX", E_LOFI, 3, ART_STRK, 2, .e = {V1(0), V1(4), V1(28), V1(0), V1(0), V1(0), V1(0), V1(127)}, .t = T_LOFI, .l = V1(62), .id = 11},
-    {"RING BELL", E_TRIO, 3, ART_STRK, 2, .t = T_TRIO, .l = V1(66), .id = 12},
-    {"PD BELL", E_PHASE, 4, ART_STRK, 2, .t = T_PHASE, .l = V1(68), .id = 13},
+    {"RING BELL", E_TRIO, 3, ART_STRK, 2, .t = T_TRIO, .l = V1(66), .br = 1, .id = 12},
+    {"PD BELL", E_PHASE, 4, ART_STRK, 2, .t = T_PHASE, .l = V1(68), .br = 1, .id = 13},
     {"PD WIRE", E_PHASE, 5, ART_SOFT, 1, .t = T_PHASE, .l = V1(62), .id = 14},
-    {"GAMELAN", E_NOISE, 3, ART_STRK, 1, .t = T_METAL, .l = V1(86), .id = 15},
+    {"GAMELAN", E_NOISE, 3, ART_STRK, 1, .t = T_METAL, .l = V1(86), .br = 1, .id = 15},
     {"FELT FLUTE", E_WHEEL, 3, ART_SOFT, 2, .t = T_WHEEL, .l = V1(71), .id = 16},
     {"VOX LINE", E_VOICE, 1, ART_SWEL, 2, .t = T_VOICE, .l = V1(72), .id = 17},
 };
@@ -155,6 +156,8 @@ static void maku_voice_set(uint32_t i, uint32_t r)
             t->p[P_E0 + k] = (int16_t)(v->e[k] - 1);
     if (maku_held(i) && i != MAKU_ARP)
         t->p[P_SDIV] = 1;                           /* 1/8: a swell, a chord of seven seconds, has the time to arrive */
+    maku.vl[i] = v->br ? 13000u : 36000u;           /* the veil (maku.vl): a new voice comes in darker, a bright one darker still, and opens by itself in */
+    maku.vs[i] = v->br ? 3u : 4u;                   /* ~6 s, a bright one ~13 s */
     maku.atk0[i] = (uint8_t)t->p[P_ATK];
     maku.rel0[i] = (uint8_t)t->p[P_REL];
     for (k = 0; k < 3u; k++) {
