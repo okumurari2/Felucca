@@ -1342,7 +1342,7 @@ static int catalog(void)
     uint32_t w, b, i, k, nb = 9u * BAR_STEPS * step_blocks(), act, maxact = 0, steals = 0;
     uint32_t floor_held = 0, none_held = 0, arp_slow = 0, arp_struck = 0, n = 120u;
     uint32_t held_gap_blocks = 0, held_blocks = 0, art_seen[5] = {0}, rows_seen = 0;
-    uint8_t seen[4][16] = {{0}};
+    uint8_t seen[4][32] = {{0}};
     for (w = 1; w <= n; w++) {
         uint32_t fa, fb, quiet_a = 0, quiet_b = 0, ea, eb, pk[4] = {0}, st0 = steals;
         start(127);
@@ -1360,7 +1360,7 @@ static int catalog(void)
         arp_struck += !maku_held(MAKU_ARP);
         for (i = 1; i < 4u; i++) {
             art_seen[maku.art[i]]++;
-            seen[i][maku.voice[i] & 15u] = 1;
+            seen[i][maku.voice[i] & 31u] = 1;
         }
         ea = trk[MAKU_DRA].eng_req;
         eb = trk[MAKU_DRB].eng_req;
@@ -1399,7 +1399,7 @@ static int catalog(void)
         (void)ea; (void)eb;
     }
     for (i = 1; i < 4u; i++)
-        for (k = 0; k < 16u; k++)
+        for (k = 0; k < 32u; k++)
             rows_seen += seen[i][k];
     printf("ui:   catalog, %u worlds: floor held %u, none of floor / haze held %u, slow melody %u / struck %u; most voices at once %u, steals %u; "
            "held parts silent in %u of %u blocks; %u rows of the catalog seen\n",
@@ -1410,7 +1410,7 @@ static int catalog(void)
     bad += check("CATALOG: held voices hold (silent less than 2 % of the blocks after the first bar)", held_blocks && held_gap_blocks * 50u < held_blocks);
     bad += check("CATALOG: a slow melody and a struck one both occur; all five articulations are heard over the parts",
                  arp_slow >= 5u && arp_struck >= 5u && art_seen[ART_STRK] && art_seen[ART_SOFT] && art_seen[ART_SWEL] && art_seen[ART_BOW] && art_seen[ART_HOLD]);
-    bad += check("CATALOG: most rows of the catalog turn up (>= 20 of 24)", rows_seen >= 20u);
+    bad += check("CATALOG: most rows of the catalog turn up (>= 36 of 44)", rows_seen >= 36u);
     return bad;
 }
 

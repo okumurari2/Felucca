@@ -354,6 +354,7 @@ static const struct { const char *name; mm_t m[MAKU_NM]; } MAKU_MAC[4][3] = {
 };
 
 static mm_t maku_tone[4][3];         /* each track's TONE macro (j = 1): MAKU_MAC's, or the voice's own (maku_voices.c) */
+static mm_t maku_mac0[4][3];         /* each track's first macro (j = 0): MAKU_MAC's, or the voice's own (the haze's GRAIN macro is GRAIN's; another engine has its own) */
 static void maku_set_density(uint32_t d);
 /* macro j of track i to v (0..127): stored, and every parameter it owns moves */
 static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
@@ -366,7 +367,7 @@ static void maku_macro_set(uint32_t i, uint32_t j, uint32_t v)
     if (j == 1u)                                     /* LIFT: every track's TONE, a way up to the top (TONE 127 and full: all the way) */
         v += ((127u - v) * maku_vamt(VB_LIFT, 0)) / 127u;
     for (n = 0; n < (j == 2u ? MAKU_NM : 3u); n++) {
-        const mm_t *e = j == 1u ? &maku_tone[i][n] : &MAKU_MAC[i][j].m[n];
+        const mm_t *e = j == 1u ? &maku_tone[i][n] : j == 0u ? &maku_mac0[i][n] : &MAKU_MAC[i][j].m[n];
         int32_t lo = e->lo, hi = e->hi;
         if (e->p == MM_NONE)
             continue;

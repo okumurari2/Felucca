@@ -132,8 +132,9 @@ CPU estimate: worst case ~51 % of the device (host-derived, not measured); overl
 
 ## Kept / dropped
 
-- Dropped: sequencer editing, saving (presets, projects, RESTORE LAST), the sound-editing pages and most engines (FM6,
-  SAMPLE, SLICE, LOFI, WHEEL, VOICE, TRIO, PHASE, NOISE), the menu, the web editor and its protocol.
+- Dropped: sequencer editing, saving (presets, projects, RESTORE LAST), the sound-editing pages and the engines FM6, SAMPLE
+  and SLICE as a choice (LOFI, WHEEL, VOICE, TRIO, PHASE and NOISE are back as rows of the voice catalog, VOICES_RATING.md 9),
+  the menu, the web editor and its protocol.
 - Kept: the generator, the 4-track mixer, 8 voices, ducking, the space effects and limiter, MIDI clock in, the firmware
   update path (needed to return to the official firmware), the browser emulator.
 

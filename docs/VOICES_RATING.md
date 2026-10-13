@@ -282,3 +282,24 @@ worklet  ──{type:"snap", data}──▶  ページ：rating・note・時刻�
 - **処理負荷：最悪の世界（PHYS の持続＝GLASS / BOWED METAL の床）で旧 MAKU（密度127）の約 ×2.1**（ホストの測定はぶれる：×1.9〜2.7）。換算すると実機の約 63%。押さえっぱなしのエフェクトを足すともう少し上がる（旧 ×2.1 → 今 ×2.6 の目安）。**85% でボイスを減らす保護は残っているが、実機では未測定**。重ければ、GLASS / BOWED METAL の重みを下げるか、床を1声にする。
 - 音量：声の組み合わせで平均レベルが ±2 dB に収まるよう、ANALOG のパッドだけ LEVEL を 72 にした（それまで +4 dB 大きかった）。
 - 実機用ビルド（`./build.sh`）は、この環境に JieLi のツールチェーンがなく**走らせていない**。カタログの定数は読み出し専用データで数百バイトの見込み。`tests/target_budget.txt` は更新していない。
+
+---
+
+## 9. カタログの拡張：Felucca の他のエンジンを音源に戻す（2026-10-13、`MAKU_CATALOG_VERSION` 3）
+
+きっかけ：どのパートも聞き覚えのある音ばかりになった。カタログ（床・霞・声）は PHYS / ANALOG / GRAIN の行だけだった。
+ビルドにはすでに入っているのに MAKU が使っていなかったエンジン（WHEEL、VOICE、NOISE、PHASE、TRIO、LOFI）から行を足した。追加のコードはなく、フラッシュは行の分（約 2 KB）だけ増える。
+
+| パート | 足した行（ID） | 出し方 |
+|---|---|---|
+| 床 | HOLLOW ORGAN（10）、CHAPEL（11）：WHEEL。CHOIR DRONE（12）：VOICE。WIND TONE（13）：NOISE。RESO PAD（14）：PHASE。CHIP CHOIR（15）、FAT BASS（16）：TRIO | 最初の 5 つは持続（HOLD / SWEL）。FAT BASS だけ打つ音（床の持続系を 4 分の 3 に保つ） |
+| 霞 | WHISPER（6）、AAH（7）：VOICE。FLUTE ORGAN（8）：WHEEL。WIND（9）、RAIN（10）：NOISE。PD BELLS（11）：PHASE | 5 つは SWEL。PD BELLS だけ STRK（SPARKLE の仲間） |
+| 声 | MUSIC BOX（11）：LOFI。RING BELL（12）：TRIO。PD BELL（13）、PD WIRE（14）：PHASE。GAMELAN（15）：NOISE（META）。FELT FLUTE（16）：WHEEL。VOX LINE（17）：VOICE | 打つ音が多い。PD WIRE と FELT FLUTE は SOFT、VOX LINE は SWEL（ゆっくりした旋律） |
+
+仕組みの変更は 2 つ。
+
+- **霞の第 1 マクロ（GRAIN）は GRAIN のもの**（E3 / E2）だったので、他のエンジンの霞では行が自前の 3 つ（`g`、`G_*`）を持つ。`maku_mac0` が `maku_tone` と同じ役。DRIFT で霞の声が変わるときも、このマクロを入れ直す。
+- 行の TONE（`T_WHEEL`、`T_VOICE`、`T_NOISE`、`T_PHASE`、`T_TRIO`、`T_LOFI`、`T_METAL`）はエンジンごとに別のパラメータを動かす。
+
+音量はホストで 1 行ずつ単独で鳴らして合わせた（TONE の中央で、床の持続は RMS 約 2000、霞は約 400、声は約 110。`.l` で LEVEL を上書き）。TONE の 0 と 127 でも極端に外れないよう範囲を絞った（CHAPEL の TOP、NOISE の FREQ / RES、GAMELAN の FREQ）。
+処理負荷：新しい行の単独のホスト時間は、既存の持続系（BOWED METAL / GLASS HIGH、約 200 ns/sample）以下。**耳での確認は済んでいない**（この環境に音を聴く手段がない）。聴いて合わなければ、行の重みを 0 にする（行は消さない：いいねが ID を覚えている）。
