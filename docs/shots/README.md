@@ -57,6 +57,23 @@ HUE は世界ごとに色が変わるので、同じ案を別の世界で並べ�
 | 11 BLOOM | 2×2 のまま、十字が動く。回したつまみの区画が大きくなり、しばらくすると戻る | 区画の位置は動かない。大きさだけが変わる |
 | 12 STAR | 区切り線なし。真ん中から各つまみの角へ光線（長さ = 値）。音量は MASTER の角へ4本の扇 | 光線の向き = つまみの方向 |
 
+### CORNERS の真ん中: 輪をやめて、いまの音の絵にする（9 のまま差し替え）
+
+![CORNERS 真ん中がアートワーク](mk_art.png)
+
+真ん中の4つの輪（ORBIT）を、いま鳴っているアンビエントの抽象画に替えた。数や針ではなく、光で描く。毎フレーム描き直す。
+
+| パート | 絵での姿 | 何に応じて変わるか |
+| --- | --- | --- |
+| 1 PULSE | キックのたびに真ん中から広がる波紋と、中心のコア | 打つ位置はグリッドの拍（強）とゴースト（弱）。コアはキックの DUCK で沈んで戻る。大きさ = 音量 |
+| 2 FLOOR | ゆっくり漂う3つの大きな光 | 広がり = ドローンの REV、明るさ = 音量 |
+| 3 HAZE | まばらにまたたく粒 | 粒の数 = 音量 × TONE |
+| 4 VOICE | アルペジオの1音が、調の円（根音が真上、音高が外へ）の上の点として残り、消える | 弾いた音がそのまま位置になる。12音の目印が円周に薄く並ぶ |
+
+色相は調（ROOT）から決まり、声だけは補色。全体の明るさは呼吸（breath）に従う。縁は背景に溶ける。テンポは左上、調の下の数字になった（輪の真ん中にあった）。
+
+実装は `firmware/src/ui_maku_style3.c` の `mkl_art`（`-DMK_STYLES` のときだけ）。出荷ファームは不変。
+
 ### HYBRID（CORNERS と FLANK の合いの子）: 色と書体違い
 
 ![HYBRID 6案](mk_hybrid2.png)
@@ -103,6 +120,7 @@ node tools/mk_shots.mjs docs/shots/hue_keys.png 7 1,2,3,4,5      # 案が1つな
 node tools/mk_shots.mjs docs/shots/mk_layouts.png 5,9,10,11,12   # 第3弾
 node tools/mk_shots.mjs docs/shots/mk_hybrid2.png 13,14,15,16,17,18   # HYBRID の6案
 node tools/mk_shots.mjs docs/shots/mk_strips.png 14,19,20,21          # ストリップ
+node tools/mk_shots.mjs docs/shots/mk_art.png 9 7,99,3                 # CORNERS の真ん中（絵）
 ```
 
 ## 実装
