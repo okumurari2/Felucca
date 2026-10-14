@@ -1,6 +1,6 @@
 # 画面デザイン案のスクショ（プレビュー）
 
-**このディレクトリの絵は常にこの1か所・同じファイル名で更新する**（案ごと・ブランチごとに増やさない）。見るのは比較シート `mk_styles.png`（第1弾）と `mk_styles2.png`（第2弾）の2枚でよい。
+**このディレクトリの絵は常にこの1か所・同じファイル名で更新する**（案ごと・ブランチごとに増やさない）。見るのは比較シート `mk_styles.png`（第1弾: 色と書体）、`mk_styles2.png`（第2弾: MAKU の定義から）、`mk_layouts.png`（第3弾: 画面の割り方）の3枚でよい。
 
 ![4案の比較](mk_styles.png)
 
@@ -42,9 +42,24 @@ HUE は世界ごとに色が変わるので、同じ案を別の世界で並べ�
 
 ![HUE: 世界ごとの色](hue_keys.png)
 
+## 第3弾: 画面の割り方（ORBIT の見た目で）
+
+![第3弾の比較](mk_layouts.png)
+
+列は左から 5 ORBIT（いまの 2×2）/ 9 CORNERS / 10 FLANK / 11 BLOOM / 12 STAR。行は 世界A / 世界B / SINK を押している間 / SELECT を回した直後。
+
+本体のつまみの並びは、画面の左に 2×2（MASTER SELECT / PRESETS ALGORITHM）、右に KNOB 1〜4 の横一列。どの案も「つまみのある方向に、そのつまみの中身」は守っている。波形は出さない。
+
+| 案 | 割り方 | つまみとの対応 |
+| --- | --- | --- |
+| 9 CORNERS | 区画をやめる。真ん中いっぱいに4つの輪。各マクロは自分の角を中心にした四分円の弧（値の分だけ伸びる） | 弧の位置 = つまみの方向。MASTER の角には4つの音量が扇になる |
+| 10 FLANK | 画面を本体の縮図にする。左 2/3 が左のつまみの 2×2、右 1/3 が KNOB 1〜4 の4本のフェーダー | 左右の並びまで本体と同じ |
+| 11 BLOOM | 2×2 のまま、十字が動く。回したつまみの区画が大きくなり、しばらくすると戻る | 区画の位置は動かない。大きさだけが変わる |
+| 12 STAR | 区切り線なし。真ん中から各つまみの角へ光線（長さ = 値）。音量は MASTER の角へ4本の扇 | 光線の向き = つまみの方向 |
+
 ## 触って見る
 
-エミュレーター（`web/emu/build.sh` で作る）の URL に `#style=N`（0〜8）を付ける。`#seed=7&style=4` のように、世界も指定できる。
+エミュレーター（`web/emu/build.sh` で作る）の URL に `#style=N`（0〜12）を付ける。`#seed=7&style=4` のように、世界も指定できる。
 
 ## 撮り直す
 
@@ -54,10 +69,11 @@ sh web/emu/build.sh                  # emcc が要る
 node tools/mk_shots.mjs              # docs/shots/mk_styles.png を作り直す（Playwright と Chromium が要る）
 node tools/mk_shots.mjs docs/shots/mk_styles2.png 0,5,6,7,8      # 第2弾。引数: 出力、案の列、世界(seed)の列
 node tools/mk_shots.mjs docs/shots/hue_keys.png 7 1,2,3,4,5      # 案が1つなら、その世界を並べる
+node tools/mk_shots.mjs docs/shots/mk_layouts.png 5,9,10,11,12   # 第3弾
 ```
 
 ## 実装
 
-- `firmware/src/ui_maku_style.c`（1〜4）と `ui_maku_style2.c`（5〜8）: 8案の描画。**エミュレーターだけ**（`-DMK_STYLES`）。出荷ファームには入らない。
+- `firmware/src/ui_maku_style.c`（1〜4）、`ui_maku_style2.c`（5〜8）、`ui_maku_style3.c`（9〜12、画面全体を 240×120 の帯2本で描く）: 12案の描画。**エミュレーターだけ**（`-DMK_STYLES`）。出荷ファームには入らない。
 - 色・書体・配置は案ごとの表（`MKS`）にあり、同じ描画関数が使う。データとレイアウトの決まりは出荷中の画面と同じ（つまみ1つに1区画）。
 - 追加の書体は `tools/gen_mk_fonts.py`（Fredoka、DotGothic16、IBM Plex Mono。どれも SIL OFL 1.1）と、Inter Tight の別の太さ。出荷ファームの書体は変えていない。

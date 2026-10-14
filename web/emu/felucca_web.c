@@ -384,7 +384,7 @@ EXPORT void web_enc(uint32_t role, int32_t n)
 EXPORT void web_set_seed(uint32_t v) { web_seed = v; }
 /* the preview look of MAKU's screen (ui_maku_style.c; built with -DMK_STYLES): 0 the shipped one */
 #ifdef MK_STYLES
-EXPORT void web_set_style(uint32_t v) { mk_style = (uint8_t)(v < 9u ? v : 0u); ui.force = 1; }
+EXPORT void web_set_style(uint32_t v) { mk_style = (uint8_t)(v < 13u ? v : 0u); ui.force = 1; }
 #endif
 EXPORT void web_master(uint32_t v) { web_master_adc = v > 1023u ? 1023u : v; }
 /* a channel message from Web MIDI, as a USB-MIDI packet arrives (usb.c midi_enqueue): 0 = the ring was full */

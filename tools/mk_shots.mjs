@@ -4,7 +4,7 @@
 //                                           one style only: a strip of its worlds;
 //                                           needs build/emu: web/emu/build.sh;
 //                                           Playwright with a Chromium, e.g. PLAYWRIGHT_BROWSERS_PATH)
-// Rows: two worlds (#seed=), and a verb held (SINK: key "1"); columns: the styles given (#style=N).
+// Rows: two worlds (#seed=), a verb held (SINK: key "1"), SELECT turned (the arrow keys); columns: the styles given (#style=N).
 import { createRequire } from "module";
 import http from "http"; import fs from "fs"; import path from "path"; import { execFileSync } from "child_process";
 const require = createRequire(process.env.PW_MODULES || "/opt/node22/lib/node_modules/");
@@ -28,6 +28,10 @@ for (const style of STYLES) for (const seed of SEEDS) {
     await pg.keyboard.down("1"); await pg.waitForTimeout(700);
     await pg.locator("#screen").screenshot({ path: `${tiles}/s${style}_sink.png` });
     await pg.keyboard.up("1");
+    await pg.waitForTimeout(500);
+    for (let i = 0; i < 6; i++) { await pg.keyboard.press("ArrowUp"); await pg.waitForTimeout(40); }   // SELECT turned
+    await pg.waitForTimeout(350);
+    await pg.locator("#screen").screenshot({ path: `${tiles}/s${style}_turn.png` });
   }
   await pg.close();
 }

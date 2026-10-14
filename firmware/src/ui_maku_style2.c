@@ -507,9 +507,20 @@ static void mkx_scope_top_left(uint32_t f)
     cv_blit(0, 0);
 }
 
+#include "ui_maku_style3.c"          /* layouts 9..12 */
+
 static void mkx_draw(uint32_t f, uint32_t v, uint32_t redraw)
 {
     uint32_t j;
+    if (mk_style >= 9u) {                                               /* the whole screen every frame (the rings move) */
+        if (ux.mono || ux.light) {
+            ux.mono = 0;
+            ux.light = 0;
+            ux.gen++;
+        }
+        mkl_draw(f, v);
+        return;
+    }
     uint16_t bg = mk_style == 5 ? OB_BG : mk_style == 6 ? GR_BG : mk_style == 7 ? hu_bg(120) : SC_BG;
     hu_h = (int32_t)(trk[MAKU_DRA].p[P_ROOT] % 12) * 30 + 200;
     if (ux.mono || ux.light != (mk_style == 6u)) {
