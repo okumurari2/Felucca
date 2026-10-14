@@ -11,21 +11,29 @@
  * They act on each other: the wind pushes the leaves, the stream carries what has fallen on it, a ripple lifts a leaf, and a
  * kick dips the stream and the wind (the DUCK). The key sets the season (C..D spring, D#..F summer, F#..G# autumn, A..B winter;
  * a minor scale adds dusk), the verbs are events (SINK dives, LIFT lights, SWELL heaves, WOBBLE curls, CASCADE showers,
- * SCRAMBLE gusts), DRIFT sends a cloud. Painted back to front with alpha against what is already there (the canvas is read
- * back); the edge of the window melts into the background. Drawn on the whole screen in two bands, state stepped once a frame. */
+ * SCRAMBLE gusts), DRIFT sends a cloud. No scenery: only the things themselves (drops, ripples, lines of water, leaves, birds,
+ * shafts of light) on a white page, painted with alpha against what is already there (the canvas is read back); there is no
+ * window edge, the things just fade out towards the rim (SC_R). Drawn on the whole screen in two bands, state stepped once a frame. */
 
 #define SC_X0 36
 #define SC_X1 204
-#define SC_R 78
+#define SC_R 84
+#define SW_BG RGB(252, 252, 250)                /* the page: white; the rest of the screen (text, arcs) takes these inks */
+#define SW_LINE RGB(222, 225, 232)
+#define SW_TEXT RGB(32, 38, 52)
+#define SW_DIM RGB(126, 134, 150)
+#define SW_ACC RGB(20, 108, 178)
 
 static int32_t sc_ylo, sc_yhi;              /* the rows of the band being drawn (screen y), clipped to the window */
+static int32_t sc_gain = 256;               /* 256 = whole; SINK fades everything towards the page */
 
+/* inks for a white page (deep: the water / the main line, light: its pale tint, ground: acorns and dust, sand: sand and mist) */
 typedef struct { uint16_t s0, s1, deep, light, leaf[3], ground, sand; } scp_t;
 static const scp_t SCP[4] = {
-    {RGB(150, 190, 220), RGB(238, 222, 224), RGB(70, 120, 140), RGB(235, 245, 250), {RGB(244, 168, 190), RGB(250, 206, 214), RGB(150, 200, 120)}, RGB(120, 100, 80), RGB(226, 204, 170)},
-    {RGB(80, 150, 214), RGB(200, 228, 232), RGB(30, 96, 130), RGB(240, 250, 245), {RGB(52, 150, 84), RGB(90, 180, 90), RGB(30, 110, 70)}, RGB(84, 70, 52), RGB(238, 214, 160)},
-    {RGB(204, 148, 110), RGB(244, 214, 168), RGB(70, 90, 100), RGB(250, 232, 200), {RGB(214, 84, 40), RGB(236, 150, 44), RGB(170, 60, 36)}, RGB(104, 70, 44), RGB(214, 184, 140)},
-    {RGB(130, 150, 184), RGB(222, 228, 238), RGB(60, 82, 112), RGB(244, 248, 255), {RGB(240, 244, 250), RGB(210, 220, 236), RGB(255, 255, 255)}, RGB(150, 156, 170), RGB(226, 228, 236)},
+    {0, 0, RGB(86, 160, 206), RGB(170, 208, 232), {RGB(240, 140, 170), RGB(246, 176, 192), RGB(130, 190, 100)}, RGB(150, 120, 90), RGB(214, 186, 140)},
+    {0, 0, RGB(34, 118, 188), RGB(140, 196, 226), {RGB(40, 150, 76), RGB(90, 180, 80), RGB(24, 110, 64)}, RGB(110, 84, 60), RGB(224, 194, 130)},
+    {0, 0, RGB(72, 118, 148), RGB(176, 196, 204), {RGB(214, 84, 40), RGB(236, 150, 44), RGB(170, 60, 36)}, RGB(130, 90, 60), RGB(208, 170, 116)},
+    {0, 0, RGB(104, 136, 190), RGB(190, 206, 230), {RGB(168, 188, 220), RGB(140, 160, 204), RGB(196, 210, 236)}, RGB(150, 156, 172), RGB(190, 198, 214)},
 };
 
 static uint32_t sc_rs = 0x2545F491u;
@@ -51,10 +59,25 @@ static float sc_cl(float v, float lo, float hi) { return v < lo ? lo : v > hi ? 
 /* ---- painter: alpha 0..255 against the canvas, clipped to the window's square and the band ---- */
 static inline void sc_px(int32_t x, int32_t y, uint16_t c, int32_t a)
 {
-    int32_t yy = y + cv_oy;
+    static uint8_t rim[SC_R * SC_R + 1], ready;
+    int32_t yy = y + cv_oy, d2;
     uint32_t u, r, g, b;
     uint16_t *p;
     if (a <= 0 || x < SC_X0 || x >= SC_X1 || y < SC_X0 || y >= SC_X1 || (uint32_t)x >= cv_w || (uint32_t)yy >= cv_h)
+        return;
+    if (!ready) {                                                     /* the fade towards the rim: whole inside 0.7 R, nothing at R */
+        for (d2 = 0; d2 <= SC_R * SC_R; d2++) {
+            float dd = sqrtf((float)d2) / (float)SC_R, t = dd < 0.7f ? 1.0f : 1.0f - (dd - 0.7f) / 0.3f;
+            t = t < 0.0f ? 0.0f : t;
+            rim[d2] = (uint8_t)(255.0f * t * t * (3.0f - 2.0f * t));
+        }
+        ready = 1;
+    }
+    d2 = (x - 120) * (x - 120) + (y - 120) * (y - 120);
+    if (d2 >= SC_R * SC_R)
+        return;
+    a = (a * rim[d2] >> 8) * sc_gain >> 8;
+    if (a <= 0)
         return;
     if (a > 255)
         a = 255;
@@ -73,12 +96,6 @@ static uint16_t sc_dim(uint16_t c, float k)
 }
 static uint16_t sc_dusk(uint16_t c, int minor) { return minor ? mk_mix(c, RGB(200, 110, 90), 22) : c; }
 
-static void sc_grad(int32_t y0, int32_t y1, uint16_t c0, uint16_t c1)
-{
-    int32_t y, lo = y0 < sc_ylo ? sc_ylo : y0, hi = y1 > sc_yhi ? sc_yhi : y1;
-    for (y = lo; y < hi; y++)
-        cv_rect(SC_X0, y, SC_X1 - SC_X0, 1, mk_mix(c0, c1, (y - y0) * 100 / (y1 - y0)));
-}
 static void sc_rows(int32_t x0, int32_t x1, int32_t y0, int32_t y1, uint16_t c, int32_t a)    /* a flat translucent box */
 {
     int32_t x, y;
@@ -368,7 +385,7 @@ static void sc_step(uint32_t f, uint32_t kind)
             sc_ev[i].on = 0;
 }
 
-/* ---- the three scenes ---- */
+/* ---- the three scenes: things only, on the white page ---- */
 static const scp_t *sc_pal(void) { return &SCP[sc.season & 3]; }
 static int sc_snow(void) { return sc.season == 3; }
 
@@ -376,20 +393,19 @@ static void sc_draw_leaf(const scl_t *l, float a, uint16_t hint, float size)
 {
     const scp_t *P = sc_pal();
     uint16_t c = P->leaf[l->col % 3u];
-    c = sc_mixf(c, RGB(255, 230, 120), 0.3f * sc.m[3][1]);
+    c = sc_mixf(c, RGB(255, 200, 80), 0.3f * sc.m[3][1]);
     (void)hint;
     if (sc_snow())
-        sc_flake(l->x, l->y, size * 0.55f, c, a);
+        sc_flake(l->x, l->y, size * 0.7f, c, a);
     else
         sc_leaf(l->x, l->y, l->ang, size, c, a);
 }
 
-static void sc_verbs(const scp_t *P)                                  /* the verbs: the whole view changes */
+static void sc_verbs(const scp_t *P)                                  /* LIFT: a warm glow behind the things; (SINK is sc_gain, set in mkl_scene) */
 {
-    if (sc.sink > 0.01f)
-        sc_rows(SC_X0, SC_X1, SC_X0, SC_X1, RGB(14, 40, 78), (int32_t)(sc.sink * 150.0f));
+    (void)P;
     if (sc.lift > 0.01f)
-        sc_rows(SC_X0, SC_X1, SC_X0, SC_X1, P->light, (int32_t)(sc.lift * 48.0f));
+        sc_ellfill(120.0f, 120.0f, 60.0f, 60.0f, RGB(255, 226, 150), sc.lift * 70.0f);
 }
 
 static void sc_cloud(float y, float a, uint16_t c)                    /* DRIFT: one cloud, slowly across */
@@ -400,59 +416,62 @@ static void sc_cloud(float y, float a, uint16_t c)                    /* DRIFT: 
     sc_ellfill(x - 13.0f, y + 1.0f, 14.0f, 5.0f, c, a);
 }
 
-static void sc_melt(void)                                             /* the edge of the window melts into the background */
+/* the leaves / the snow (VOICE); in the water they are carried and lift on a ripple, in the forest they jump on a ring of dust */
+static void sc_leaves(uint32_t kind)
 {
-    static uint8_t lut[SC_R * SC_R + 1], ready;
-    int32_t x, y, d2, inner = (int32_t)(0.82f * (float)SC_R), i2 = inner * inner;
-    if (!ready) {
-        for (d2 = 0; d2 <= SC_R * SC_R; d2++) {
-            float dd = sqrtf((float)d2) / (float)SC_R, t = dd < 0.82f ? 1.0f : 1.0f - (dd - 0.82f) / 0.18f;
-            t = t < 0.0f ? 0.0f : t;
-            lut[d2] = (uint8_t)(255.0f * t * t * (3.0f - 2.0f * t));
-        }
-        ready = 1;
-    }
-    for (y = SC_X0; y < SC_X1; y++) {
-        if (y < sc_ylo || y >= sc_yhi)
+    int32_t i, k2;
+    const scp_t *P = sc_pal();
+    for (i = 0; i < 14; i++) {
+        const scl_t *l = &sc_lf[i];
+        float a = 255.0f * sc.foc[3] * (sc.lev[3] > 0.02f ? 1.0f : 0.0f), lift = 0.0f;
+        scl_t tmp;
+        if (!l->on)
             continue;
-        for (x = SC_X0; x < SC_X1; x++) {
-            int32_t dx = x - 120, dy = y - 120;
-            d2 = dx * dx + dy * dy;
-            if (d2 <= i2)
-                continue;
-            sc_px(x, y, OB_BG, d2 >= SC_R * SC_R ? 255 : 255 - lut[d2]);
+        if (l->rest) {
+            a *= sc_cl((l->life - l->age) * 1.0f, 0.0f, 1.0f);
+            for (k2 = 0; k2 < 8; k2++) {
+                if (!sc_ev[k2].on)
+                    continue;
+                if (kind == 0u) {                                     /* a ripple under it lifts it */
+                    float ag = (float)(sc_ms - sc_ev[k2].t0) * 0.001f, rr = 3.0f + 20.0f * ag, dx = l->x - (float)sc_ev[k2].x, dy = l->y - (float)sc_ev[k2].y, d = sqrtf(dx * dx + dy * dy * 6.0f);
+                    if (fabsf(d - rr) < 5.0f && ag < 1.2f)
+                        lift = -2.0f * (1.0f - fabsf(d - rr) / 5.0f);
+                } else {                                              /* a ring of dust near it makes it jump */
+                    float ag = (float)(sc_ms - sc_ev[k2].t0) * 0.001f - 0.42f, d = fabsf(l->x - (float)sc_ev[k2].x);
+                    if (ag > 0.0f && ag < 0.5f && d < 24.0f && fabsf(l->y - (float)sc_ev[k2].y) < 12.0f)
+                        lift = -3.0f * sinf(ag / 0.5f * 3.1415927f) * (1.0f - d / 24.0f);
+                }
+            }
+            if (kind == 0u && l->age < 3.0f * sc.m[3][2] + 1.0f)      /* TRAIL: the wake behind it */
+                sc_line(l->x - 4.0f - 30.0f * sc.m[3][2], l->y + 1.0f, l->x, l->y + 1.0f, 1.5f, P->light, 120.0f * sc.lev[3]);
         }
+        tmp = *l;
+        tmp.y += lift;
+        sc_draw_leaf(&tmp, a, 0, 5.5f + 5.0f * sc.lev[3]);
     }
 }
 
-/* WATER: a branch over a stream ------------------------------------------------------------------------------------ */
+/* WATER: drops and ripples, lines of stream, strokes of wind, leaves ------------------------------------------------ */
 static void sc_water(void)
 {
     const scp_t *P = sc_pal();
     int32_t hz = 118, i, k;
     float t = sc.clk, dk = 1.0f - 0.55f * sc.duck, sw = 1.0f + 1.4f * sc.swell;
-    uint16_t s0 = sc_dusk(P->s0, sc.minor), s1 = sc_dusk(P->s1, sc.minor), far = sc_mixf(s1, P->deep, 0.35f);
-    uint16_t w0 = sc_mixf(P->deep, s1, 0.2f + 0.5f * sc.m[1][1]), w1 = sc_dim(P->deep, 0.72f);
-    sc_grad(SC_X0, hz, s0, s1);
-    for (i = SC_X0; i < SC_X1; i++) {                                 /* far hills */
-        float xf = (float)i / 240.0f, h = 14.0f + 10.0f * sinf(xf * 5.0f + 1.0f) + 6.0f * sinf(xf * 11.0f);
-        sc_rows(i, i + 1, hz - (int32_t)h, hz, far, 255);
-    }
-    sc_grad(hz, SC_X1, w0, w1);
+    uint16_t ink = sc_dusk(P->deep, sc.minor), pale = sc_dusk(P->light, sc.minor), wc = sc_mixf(pale, ink, 0.4f + 0.5f * sc.m[1][1]);
     if (sc.drift > 0.5f)
-        sc_cloud(62.0f, 90.0f, sc_mixf(s1, RGB(255, 255, 255), 0.6f));
-    {                                                                 /* the stream: bands, bends by SWAY, glints by TONE */
+        sc_cloud(62.0f, 110.0f, pale);
+    {                                                                 /* the stream: lines, count by OPEN, bends by SWAY, glints by TONE */
         int32_t nb = 3 + (int32_t)(sc.m[1][0] * 9.0f);
         for (i = 0; i < nb; i++) {
-            float tt = (float)(i + 1) / (float)(nb + 1), y = (float)hz + (float)(SC_X1 - hz) * powf(tt, 1.7f) * 1.02f;
-            sc_wave(y, (0.6f + 5.0f * sc.m[1][2]) * (0.4f + tt) * sw, 0.06f * (1.2f - 0.6f * tt), -t * (0.9f + 1.6f * tt) + (float)i * 1.7f, sc_mixf(w0, P->light, 0.25f + 0.3f * sc.m[1][1]),
-                    (30.0f + 90.0f * sc.lev[1]) * dk * sc.foc[1], 0.8f + 1.8f * tt, SC_X0, SC_X1);
+            float tt = (float)(i + 1) / (float)(nb + 1), y = (float)hz + 6.0f + 70.0f * powf(tt, 1.5f);
+            sc_wave(y, (0.6f + 5.0f * sc.m[1][2]) * (0.4f + tt) * sw, 0.06f * (1.2f - 0.6f * tt), -t * (0.9f + 1.6f * tt) + (float)i * 1.7f, wc,
+                    (90.0f + 150.0f * sc.lev[1]) * dk * sc.foc[1], 0.9f + 1.6f * tt, SC_X0, SC_X1);
         }
         for (i = 0; i < (int32_t)(sc.lev[1] * (4.0f + 40.0f * sc.m[1][1] * sc.m[1][1])); i++) {
             float x = (float)SC_X0 + sc_hf((uint32_t)i, 1u) * 168.0f, y = (float)hz + 6.0f + powf(sc_hf((uint32_t)i, 2u), 1.5f) * 70.0f, tw = sinf(t * (0.8f + sc_hf((uint32_t)i, 3u)) + (float)i * 2.3f);
             float len = (3.0f + 5.0f * sc_hf((uint32_t)i, 4u)) * (0.5f + (y - (float)hz) / 80.0f);
             if (tw > 0.2f)
-                sc_line(x, y, x + len, y, 1.0f, P->light, (60.0f + 130.0f * sc.m[1][1]) * tw * dk);
+                sc_line(x, y, x + len, y, 1.0f, ink, (60.0f + 130.0f * sc.m[1][1]) * tw * dk);
         }
     }
     for (i = 0; i < 8; i++) {                                         /* the ripples: drops (PULSE), WASH how far they spread and how many */
@@ -463,7 +482,7 @@ static void sc_water(void)
         age = (float)(sc_ms - e->t0) * 0.001f;
         if (age < 0.28f && e->a > 150u) {                             /* the drop, falling */
             float y = 40.0f + (float)(e->y - 40) * (age / 0.28f);
-            sc_ellfill((float)e->x, y, 1.6f, 2.6f, P->light, 220.0f * sc.foc[0]);
+            sc_ellfill((float)e->x, y, 1.8f, 2.9f, ink, 255.0f * sc.foc[0]);
             continue;
         }
         age -= e->a > 150u ? 0.28f : 0.0f;
@@ -472,7 +491,7 @@ static void sc_water(void)
             if (ra > 0.0f && ra < 1.0f) {
                 float rx = (3.0f + (7.0f + 24.0f * sc.m[0][2]) * ra) * (0.6f + 0.6f * sc.lev[0]) * (0.7f + 0.5f * (float)(e->y - hz) / 70.0f);
                 float amp = (float)e->a * (0.4f + 0.6f * sc.lev[0]) * (1.0f - ra) * (1.0f - ra) * sc.foc[0];
-                sc_ring((float)e->x + age * 2.0f * (3.0f + 11.0f * sc.lev[1]) * 0.15f, (float)e->y, rx, rx * 0.38f, 1.4f + 0.8f * (1.0f - ra), RGB(255, 255, 255), amp);
+                sc_ring((float)e->x + age * 2.0f * (3.0f + 11.0f * sc.lev[1]) * 0.15f, (float)e->y, rx, rx * 0.38f, 1.4f + 0.8f * (1.0f - ra), ink, amp);
             }
         }
     }
@@ -483,66 +502,27 @@ static void sc_water(void)
             float x = (float)SC_X0 - len + fmodf(t * sp + sc_hf((uint32_t)i, 9u) * 300.0f, 168.0f + len);
             if (sc.scr > 0.05f)
                 y += sinf(t * 9.0f + (float)i * 3.0f) * 4.0f * sc.scr;
-            sc_stroke(x, y, len, (sc_hf((uint32_t)i, 5u) - 0.5f) * (10.0f + 18.0f * sc.wob), 1.5f + 2.0f * sc.wind, sc_mixf(P->light, RGB(255, 255, 255), sc.m[2][1]), 160.0f * sc.wind * dk * sc.foc[2],
-                      0.45f * sc.m[2][0] + 0.3f * sc.scr, (uint32_t)i + (uint32_t)(t * 0.2f) * 0u);
+            sc_stroke(x, y, len, (sc_hf((uint32_t)i, 5u) - 0.5f) * (10.0f + 18.0f * sc.wob), 1.5f + 2.0f * sc.wind, sc_mixf(pale, RGB(150, 160, 180), 0.3f + 0.4f * sc.m[2][1]),
+                      230.0f * sc.wind * dk * sc.foc[2], 0.45f * sc.m[2][0] + 0.3f * sc.scr, (uint32_t)i);
         }
     }
-    sc_line((float)SC_X0 - 6.0f, 56.0f, 52.0f, 56.0f, 4.0f, sc_dim(P->ground, 0.8f), 255.0f);     /* the branch */
-    sc_line(52.0f, 56.0f, 160.0f, 46.0f, 3.0f, sc_dim(P->ground, 0.8f), 255.0f);
-    for (i = 0; i < 14; i++) {                                        /* the leaves (VOICE) */
-        const scl_t *l = &sc_lf[i];
-        float a = 255.0f * sc.foc[3] * (sc.lev[3] > 0.02f ? 1.0f : 0.0f), lift = 0.0f;
-        int32_t k2;
-        if (!l->on)
-            continue;
-        if (l->rest) {
-            a *= sc_cl((l->life - l->age) * 1.0f, 0.0f, 1.0f);
-            for (k2 = 0; k2 < 8; k2++)                                /* a ripple under it lifts it */
-                if (sc_ev[k2].on) {
-                    float ag = (float)(sc_ms - sc_ev[k2].t0) * 0.001f, rr = 3.0f + 20.0f * ag, d = sqrtf((l->x - (float)sc_ev[k2].x) * (l->x - (float)sc_ev[k2].x) + (l->y - (float)sc_ev[k2].y) * (l->y - (float)sc_ev[k2].y) * 6.0f);
-                    if (fabsf(d - rr) < 5.0f && ag < 1.2f)
-                        lift = -2.0f * (1.0f - fabsf(d - rr) / 5.0f);
-                }
-            if (l->age < 3.0f * sc.m[3][2] + 1.0f)                    /* TRAIL: the wake behind it */
-                sc_line(l->x - 4.0f - 30.0f * sc.m[3][2], l->y + 1.0f, l->x, l->y + 1.0f, 1.5f, P->light, 80.0f * sc.lev[3]);
-        }
-        {
-            scl_t tmp = *l;
-            tmp.y += lift;
-            sc_draw_leaf(&tmp, a, 0, 5.0f + 5.0f * sc.lev[3]);
-        }
-    }
+    sc_leaves(0u);
     sc_verbs(P);
 }
 
-/* FOREST: the floor under the trees ------------------------------------------------------------------------------- */
+/* FOREST: acorns and dust, mist, shafts of light, leaves ------------------------------------------------------------ */
 static void sc_forest(void)
 {
     const scp_t *P = sc_pal();
     int32_t gh = 150, i, k;
     float t = sc.clk, dk = 1.0f - 0.55f * sc.duck, sw = 1.0f + 1.4f * sc.swell;
-    uint16_t top = sc_dim(sc_dusk(sc_mixf(P->s0, RGB(40, 70, 50), 0.62f), sc.minor), 0.9f), bot = sc_dim(sc_dusk(sc_mixf(P->s1, RGB(60, 80, 56), 0.7f), sc.minor), 0.9f);
-    uint16_t gc = sc_dusk(P->ground, sc.minor);
-    if (sc.season == 2) {
-        top = sc_mixf(top, RGB(110, 64, 30), 0.4f);
-        bot = sc_mixf(bot, RGB(150, 96, 40), 0.35f);
-    } else if (sc.season == 3) {
-        top = sc_mixf(top, RGB(110, 124, 150), 0.5f);
-        bot = sc_mixf(bot, RGB(200, 208, 222), 0.5f);
-        gc = sc_mixf(gc, RGB(236, 240, 248), 0.75f);
-    }
-    sc_grad(SC_X0, gh, top, bot);
-    for (i = 0; i < 7; i++) {                                         /* the trunks */
-        float x = (0.08f + (float)i * 0.14f + 0.03f * sinf((float)i * 3.0f)) * 168.0f + (float)SC_X0;
-        int32_t wd = 3 + (i % 3) * 2;
-        sc_rows((int32_t)x - wd / 2, (int32_t)x + wd / 2 + 1, SC_X0, gh + 4, sc_mixf(bot, RGB(30, 24, 20), 0.35f + 0.1f * (float)(i % 3)), 255);
-    }
+    uint16_t gc = sc_dusk(P->ground, sc.minor), mist = sc.season == 3 ? sc_mixf(P->light, P->deep, 0.4f) : sc.season == 2 ? RGB(190, 176, 150) : RGB(150, 176, 160);
     {                                                                 /* the light (HAZE): count by GRAIN, long by AIR, colour by TONE; it leans with the wind */
         int32_t ns = (int32_t)(sc.lev[2] * (1.0f + 5.0f * (0.3f + sc.m[2][0])) + 0.5f);
-        uint16_t lc = sc_mixf(RGB(255, 240, 190), RGB(255, 255, 255), sc.m[2][1]);
+        uint16_t lc = sc_mixf(RGB(255, 206, 96), RGB(255, 232, 160), sc.m[2][1]);
         for (i = 0; i < ns && i < 7; i++) {
             float x0 = (float)SC_X0 + (0.08f + sc_hf((uint32_t)i, 11u) * 0.84f) * 168.0f, w0 = 4.0f + 7.0f * sc_hf((uint32_t)i, 12u), L = 40.0f + 90.0f * sc.m[2][2], lean = 0.25f + 0.12f * sc.wind + 0.05f * sinf(t * 0.4f + (float)i);
-            float a = (26.0f + 70.0f * sc.lev[2]) * (0.55f + 0.45f * sinf(t * 0.6f + (float)i * 1.7f)) * dk * sc.foc[2] * (1.0f + 1.2f * sc.lift);
+            float a = (50.0f + 120.0f * sc.lev[2]) * (0.55f + 0.45f * sinf(t * 0.6f + (float)i * 1.7f)) * dk * sc.foc[2] * (1.0f + 1.2f * sc.lift);
             int32_t y;
             for (y = SC_X0; y < SC_X0 + (int32_t)L && y < sc_yhi; y++) {
                 float fy = (float)(y - SC_X0), f = 1.0f - fy / L;
@@ -556,95 +536,67 @@ static void sc_forest(void)
             }
         }
     }
-    sc_grad(gh, SC_X1, sc_mixf(gc, RGB(20, 24, 18), 0.1f), sc_dim(gc, 0.55f));    /* the ground and its moss */
-    for (i = 0; i < 7; i++) {
-        float x = (float)SC_X0 + (0.1f + (float)i * 0.14f) * 168.0f, r = 11.0f + 8.0f * (float)((i * 5) % 3);
-        uint16_t mc = sc.season < 2 ? RGB(60, 110, 60) : sc.season == 2 ? sc_mixf(RGB(60, 110, 60), gc, 0.55f) : RGB(232, 238, 246);
-        sc_ellfill(x, (float)gh + 3.0f, r, r * 0.45f, sc_dusk(mc, sc.minor), 255.0f);
-    }
-    {                                                                 /* the mist (FLOOR): bands, count by OPEN, bends by SWAY, thick and bright by TONE; the kick dips it */
+    {                                                                 /* the mist (FLOOR): bands, count by OPEN, bends by SWAY, thick and dense by TONE; the kick dips it */
         int32_t nb = 2 + (int32_t)(sc.m[1][0] * 5.0f);
         for (i = 0; i < nb; i++) {
             float y = (float)gh - (3.0f + 18.0f * ((float)i / (float)nb)) + (float)(i % 2) * 5.0f;
             for (k = 0; k < 4; k++)
-                sc_wave(y + (float)k * 2.0f, (0.8f + 6.0f * sc.m[1][2]) * sw, 0.045f, t * (0.5f + 0.3f * (float)i) * (i % 2 ? -1.0f : 1.0f) + (float)i * 2.1f + (float)k * 0.3f, sc_mixf(RGB(220, 230, 230), P->light, sc.m[1][1]),
-                        (10.0f + 34.0f * sc.lev[1]) * (0.4f + 0.6f * sc.m[1][1]) * dk * sc.foc[1], 3.0f + 2.0f * (float)(nb - i) / (float)nb, SC_X0, SC_X1);
+                sc_wave(y + (float)k * 2.0f, (0.8f + 6.0f * sc.m[1][2]) * sw, 0.045f, t * (0.5f + 0.3f * (float)i) * (i % 2 ? -1.0f : 1.0f) + (float)i * 2.1f + (float)k * 0.3f, sc_dusk(mist, sc.minor),
+                        (22.0f + 70.0f * sc.lev[1]) * (0.4f + 0.6f * sc.m[1][1]) * dk * sc.foc[1], 3.0f + 2.0f * (float)(nb - i) / (float)nb, SC_X0, SC_X1);
         }
     }
     for (i = 0; i < 8; i++) {                                         /* acorns (PULSE): they fall, bounce, and raise a ring of dust; WASH how far it spreads */
         const sce_t *e = &sc_ev[i];
-        float age;
+        float age, al = 255.0f * sc.foc[0] * sc_cl(sc.lev[0] * 2.0f, 0.3f, 1.0f);
         if (!e->on)
             continue;
         age = (float)(sc_ms - e->t0) * 0.001f;
         if (age < 0.42f) {
             float y = 40.0f + (float)(e->y - 40) * (age / 0.42f) * (age / 0.42f);
-            sc_ellfill((float)e->x, y, 2.4f, 3.0f, RGB(150, 100, 56), 255.0f * sc.foc[0] * sc_cl(sc.lev[0] * 2.0f, 0.2f, 1.0f));
-            sc_ellfill((float)e->x, y - 2.4f, 2.8f, 1.8f, RGB(104, 68, 40), 255.0f * sc.foc[0] * sc_cl(sc.lev[0] * 2.0f, 0.2f, 1.0f));
+            sc_ellfill((float)e->x, y, 2.6f, 3.3f, RGB(150, 100, 56), al);
+            sc_ellfill((float)e->x, y - 2.6f, 3.0f, 2.0f, RGB(96, 62, 36), al);
             continue;
         }
         age -= 0.42f;
         {
-            float bounce = age < 0.3f ? 5.0f * sinf(age / 0.3f * 3.1415927f) : 0.0f;
-            sc_ellfill((float)e->x, (float)e->y - bounce, 2.4f, 3.0f, RGB(150, 100, 56), (age < 1.6f ? 255.0f : 0.0f) * sc.foc[0] * sc_cl(sc.lev[0] * 2.0f, 0.2f, 1.0f));
+            float bounce = age < 0.3f ? 5.0f * sinf(age / 0.3f * 3.1415927f) : 0.0f, fa = age < 1.6f ? 1.0f : sc_cl((2.2f - age) / 0.6f, 0.0f, 1.0f);
+            sc_ellfill((float)e->x, (float)e->y - bounce, 2.6f, 3.3f, RGB(150, 100, 56), al * fa);
+            sc_ellfill((float)e->x, (float)e->y - bounce - 2.6f, 3.0f, 2.0f, RGB(96, 62, 36), al * fa);
         }
         for (k = 0; k < 1 + (int32_t)(sc.m[0][2] * 3.0f); k++) {
             float ra = (age - (float)k * 0.18f) / (0.8f + 1.0f * sc.m[0][2]);
             if (ra > 0.0f && ra < 1.0f) {
                 float rx = 3.0f + (6.0f + 22.0f * sc.m[0][2]) * ra * (0.6f + 0.6f * sc.lev[0]);
-                sc_ring((float)e->x, (float)e->y + 3.0f, rx, rx * 0.35f, 1.5f, sc_mixf(P->light, RGB(240, 220, 180), 0.5f), (float)e->a * (0.4f + 0.6f * sc.lev[0]) * (1.0f - ra) * (1.0f - ra) * sc.foc[0]);
+                sc_ring((float)e->x, (float)e->y + 3.0f, rx, rx * 0.35f, 1.5f, gc, (float)e->a * (0.4f + 0.6f * sc.lev[0]) * (1.0f - ra) * (1.0f - ra) * sc.foc[0]);
             }
         }
     }
-    for (i = 0; i < 14; i++) {                                        /* the leaves (VOICE) */
-        const scl_t *l = &sc_lf[i];
-        float a = 255.0f * sc.foc[3] * (sc.lev[3] > 0.02f ? 1.0f : 0.0f), lift = 0.0f;
-        int32_t k2;
-        if (!l->on)
-            continue;
-        if (l->rest) {
-            a *= sc_cl((l->life - l->age) * 1.0f, 0.0f, 1.0f);
-            for (k2 = 0; k2 < 8; k2++)                                /* a ring of dust near it makes it jump */
-                if (sc_ev[k2].on) {
-                    float ag = (float)(sc_ms - sc_ev[k2].t0) * 0.001f - 0.42f, d = fabsf(l->x - (float)sc_ev[k2].x);
-                    if (ag > 0.0f && ag < 0.5f && d < 24.0f && fabsf(l->y - (float)sc_ev[k2].y) < 12.0f)
-                        lift = -3.0f * sinf(ag / 0.5f * 3.1415927f) * (1.0f - d / 24.0f);
-                }
-        }
-        {
-            scl_t tmp = *l;
-            tmp.y += lift;
-            sc_draw_leaf(&tmp, a, 0, 5.0f + 5.0f * sc.lev[3]);
-        }
-    }
+    sc_leaves(1u);
     sc_verbs(P);
 }
 
-/* SEA: a swell and a beach ------------------------------------------------------------------------------------------ */
+/* SEA: lines of swell, waves up the shore, birds, streaks of wind and sand ------------------------------------------ */
 static void sc_sea(void)
 {
     const scp_t *P = sc_pal();
     int32_t hz = 100, sh = 164, i, k;
     float t = sc.clk, dk = 1.0f - 0.55f * sc.duck, sw = 1.0f + 1.4f * sc.swell;
-    uint16_t s0 = sc_dusk(P->s0, sc.minor), s1 = sc_dusk(P->s1, sc.minor), sea0 = sc_mixf(P->deep, s1, 0.15f + 0.35f * sc.m[1][1]), sea1 = sc_dim(P->deep, 0.75f), sand = sc_dusk(P->sand, sc.minor);
-    sc_grad(SC_X0, hz, s0, s1);
-    sc_grad(hz, sh, sea0, sea1);
-    sc_grad(sh, SC_X1, sand, sc_dim(sand, 0.8f));
+    uint16_t ink = sc_dusk(P->deep, sc.minor), pale = sc_dusk(P->light, sc.minor), sand = sc_dusk(P->sand, sc.minor), wc = sc_mixf(pale, ink, 0.45f + 0.45f * sc.m[1][1]);
     if (sc.drift > 0.5f)
-        sc_cloud(66.0f, 90.0f, sc_mixf(s1, RGB(255, 255, 255), 0.6f));
+        sc_cloud(66.0f, 110.0f, pale);
     {
         int32_t nb = 3 + (int32_t)(sc.m[1][0] * 5.0f);
         for (i = 0; i < nb; i++) {                                    /* the swell (FLOOR) */
             float tt = (float)(i + 1) / (float)(nb + 1), y = (float)hz + (float)(sh - hz) * powf(tt, 1.4f);
-            sc_wave(y, (0.8f + 6.0f * sc.m[1][2]) * (0.4f + tt) * sw, 0.05f, -t * (0.6f + 1.0f * tt) + (float)i * 1.3f, sc_mixf(sea0, P->light, 0.15f + 0.25f * sc.m[1][1]), (25.0f + 70.0f * sc.lev[1]) * dk * sc.foc[1], 0.8f + 1.8f * tt, SC_X0, SC_X1);
+            sc_wave(y, (0.8f + 6.0f * sc.m[1][2]) * (0.4f + tt) * sw, 0.05f, -t * (0.6f + 1.0f * tt) + (float)i * 1.3f, wc, (90.0f + 150.0f * sc.lev[1]) * dk * sc.foc[1], 0.9f + 1.6f * tt, SC_X0, SC_X1);
         }
         for (i = 0; i < (int32_t)(sc.lev[1] * (3.0f + 30.0f * sc.m[1][1] * sc.m[1][1])); i++) {
             float x = (float)SC_X0 + sc_hf((uint32_t)i, 21u) * 168.0f, y = (float)hz + powf(sc_hf((uint32_t)i, 22u), 1.5f) * (float)(sh - hz - 6), tw = sinf(t * (0.8f + sc_hf((uint32_t)i, 23u)) + (float)i * 2.7f);
             if (tw > 0.2f)
-                sc_line(x, y, x + 6.0f, y, 1.0f, P->light, (60.0f + 120.0f * sc.m[1][1]) * tw * dk);
+                sc_line(x, y, x + 6.0f, y, 1.0f, ink, (60.0f + 120.0f * sc.m[1][1]) * tw * dk);
         }
     }
-    for (i = 0; i < 8; i++) {                                         /* the waves (PULSE): up the beach and back; WASH how many lines follow */
+    for (i = 0; i < 8; i++) {                                         /* the waves (PULSE): up the shore and back; WASH how many lines follow; a line of sand where it reached */
         const sce_t *e = &sc_ev[i];
         float age, p;
         if (!e->on)
@@ -658,33 +610,33 @@ static void sc_sea(void)
             if (pp <= 0.0f || pp >= 1.0f)
                 continue;
             y = (float)sh - 20.0f + 36.0f * (pp < 0.45f ? 1.0f - (1.0f - pp / 0.45f) * (1.0f - pp / 0.45f) : 1.0f - 0.45f * (pp - 0.45f) / 0.55f) + (float)k * 2.0f;
-            sc_rows(52, 188, (int32_t)(y - 3.0f), (int32_t)(y + 2.0f), sc_dim(sand, 0.7f), (int32_t)(40.0f * (1.0f - pp) * sc.lev[0]));   /* the wet sand it leaves */
-            sc_wave(y, (1.5f + 2.5f * sc.lev[0]) * 1.0f, 0.07f, (float)i * 2.0f + (float)k, RGB(255, 255, 255), (float)e->a * (0.35f + 0.65f * sc.lev[0]) * (1.0f - pp * 0.7f) / (1.0f + (float)k) * sc.foc[0], (2.0f + 1.5f * sc.lev[0]) * (1.0f - (float)k * 0.25f), 56, 184);
+            sc_wave(y + 5.0f, (1.5f + 2.5f * sc.lev[0]) * 1.0f, 0.07f, (float)i * 2.0f + (float)k, sand, 150.0f * (1.0f - pp) * sc.lev[0], 1.4f, 56, 184);
+            sc_wave(y, (1.5f + 2.5f * sc.lev[0]) * 1.0f, 0.07f, (float)i * 2.0f + (float)k, ink, (float)e->a * (0.45f + 0.55f * sc.lev[0]) * (1.0f - pp * 0.7f) / (1.0f + (float)k) * sc.foc[0], (2.0f + 1.5f * sc.lev[0]) * (1.0f - (float)k * 0.25f), 56, 184);
         }
     }
-    {                                                                 /* the wind (HAZE): cloud streaks, and sand along the beach */
+    {                                                                 /* the wind (HAZE): cloud streaks, and sand along the shore */
         int32_t nw = (int32_t)(sc.wind * (2.0f + 4.0f * (0.3f + sc.m[2][0])) + 0.5f);
         for (i = 0; i < nw && i < 7; i++) {
             float len = 22.0f + 60.0f * sc.m[2][2], sp = 8.0f + 20.0f * sc.wind, y = 46.0f + (float)i * 7.0f + (1.0f - sc.m[2][2]) * 8.0f * sc_hf((uint32_t)i, 31u);
             float x = (float)SC_X0 - len + fmodf(t * sp + sc_hf((uint32_t)i, 32u) * 300.0f, 168.0f + len);
             if (sc.scr > 0.05f)
                 y += sinf(t * 9.0f + (float)i * 3.0f) * 3.0f * sc.scr;
-            sc_stroke(x, y, len, (sc_hf((uint32_t)i, 33u) - 0.5f) * (6.0f + 14.0f * sc.wob), 2.0f + 2.5f * sc.wind, sc_mixf(P->light, RGB(255, 255, 255), sc.m[2][1]), 140.0f * sc.wind * dk * sc.foc[2], 0.4f * sc.m[2][0] + 0.3f * sc.scr, (uint32_t)i);
+            sc_stroke(x, y, len, (sc_hf((uint32_t)i, 33u) - 0.5f) * (6.0f + 14.0f * sc.wob), 2.0f + 2.5f * sc.wind, sc_mixf(pale, RGB(150, 160, 180), 0.3f + 0.4f * sc.m[2][1]), 210.0f * sc.wind * dk * sc.foc[2], 0.4f * sc.m[2][0] + 0.3f * sc.scr, (uint32_t)i);
         }
         for (i = 0; i < nw * 2 && i < 12; i++) {
             float len = 14.0f + 40.0f * sc.m[2][2], sp = 22.0f + 50.0f * sc.wind, y = (float)sh + 6.0f + sc_hf((uint32_t)i, 41u) * 30.0f;
             float x = (float)SC_X0 - len + fmodf(t * sp + sc_hf((uint32_t)i, 42u) * 300.0f, 168.0f + len);
-            sc_stroke(x, y, len, (sc_hf((uint32_t)i, 43u) - 0.5f) * 3.0f, 1.2f + 1.2f * sc.wind, sc_mixf(sand, RGB(255, 255, 255), 0.55f), 130.0f * sc.wind * dk * sc.foc[2], 0.55f * sc.m[2][0] + 0.2f * sc.scr, (uint32_t)i + 77u);
+            sc_stroke(x, y, len, (sc_hf((uint32_t)i, 43u) - 0.5f) * 3.0f, 1.2f + 1.2f * sc.wind, sand, 230.0f * sc.wind * dk * sc.foc[2], 0.55f * sc.m[2][0] + 0.2f * sc.scr, (uint32_t)i + 77u);
         }
     }
     for (i = 0; i < 14; i++) {                                        /* the birds (VOICE): one a note; the pitch its height; the wind lifts them; a streak behind */
         const scl_t *l = &sc_lf[i];
-        float flap, sz = 5.0f + 6.0f * sc.lev[3], a = 255.0f * sc.foc[3] * (sc.lev[3] > 0.02f ? 1.0f : 0.0f);
-        uint16_t c = sc.season == 2 ? RGB(255, 244, 230) : RGB(250, 250, 252);
+        float flap, sz = 5.5f + 6.0f * sc.lev[3], a = 255.0f * sc.foc[3] * (sc.lev[3] > 0.02f ? 1.0f : 0.0f);
+        uint16_t c = sc.season == 2 ? RGB(92, 64, 52) : RGB(58, 70, 96);
         if (!l->on)
             continue;
         flap = sinf(l->age * 6.0f + l->ph) * sz * 0.55f * (1.0f + 0.5f * sc.wob);
-        sc_line(l->x - 6.0f - 46.0f * sc.m[3][2], l->y + 2.0f, l->x - sz, l->y, 1.0f, P->light, 60.0f * sc.lev[3] * sc.foc[3]);
+        sc_line(l->x - 6.0f - 46.0f * sc.m[3][2], l->y + 2.0f, l->x - sz, l->y, 1.0f, pale, 130.0f * sc.lev[3] * sc.foc[3]);
         sc_line(l->x - sz * 1.3f, l->y - sz * 0.2f + flap, l->x, l->y + sz * 0.15f, 2.0f, c, a);
         sc_line(l->x, l->y + sz * 0.15f, l->x + sz * 1.3f, l->y - sz * 0.2f + flap, 2.0f, c, a);
     }
@@ -694,6 +646,7 @@ static void sc_sea(void)
 static void mkl_scene(uint32_t which, uint32_t f)
 {
     sc_step(f, which);
+    sc_gain = (int32_t)(256.0f * (1.0f - 0.8f * sc_cl(sc.sink, 0.0f, 1.0f)));
     sc_ylo = -cv_oy < SC_X0 ? SC_X0 : -cv_oy;
     sc_yhi = -cv_oy + (int32_t)cv_h > SC_X1 ? SC_X1 : -cv_oy + (int32_t)cv_h;
     switch (which) {
@@ -701,5 +654,4 @@ static void mkl_scene(uint32_t which, uint32_t f)
     case 1: sc_forest(); break;
     default: sc_sea(); break;
     }
-    sc_melt();
 }
