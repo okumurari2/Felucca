@@ -57,6 +57,14 @@ HUE は世界ごとに色が変わるので、同じ案を別の世界で並べ�
 | 11 BLOOM | 2×2 のまま、十字が動く。回したつまみの区画が大きくなり、しばらくすると戻る | 区画の位置は動かない。大きさだけが変わる |
 | 12 STAR | 区切り線なし。真ん中から各つまみの角へ光線（長さ = 値）。音量は MASTER の角へ4本の扇 | 光線の向き = つまみの方向 |
 
+### CORNERS の真ん中: 自然の情景にする計画（静止画のモック）
+
+![題材 × 季節](mk_scene_seasons.png)
+
+![静かな世界から賑やかな世界まで](mk_scene_states.png)
+
+設計は `docs/SCENE_PLAN.md`。行は 水辺 / 森の地面 / 海辺と砂。1枚目は季節（調から決まる）、2枚目は強さの違い（左から 静か / ふつう / 賑やか / 賑やか・別の世界）。窓の縁は背景に溶ける。まだファームでもエミュレーターでもなく、`tools/mk_scene_mock.py` が描いた静止画。
+
 ### CORNERS の真ん中: 輪をやめて、いまの音の絵にする（9 のまま差し替え）
 
 ![CORNERS 真ん中がアートワーク](mk_art.png)
@@ -121,6 +129,7 @@ node tools/mk_shots.mjs docs/shots/mk_layouts.png 5,9,10,11,12   # 第3弾
 node tools/mk_shots.mjs docs/shots/mk_hybrid2.png 13,14,15,16,17,18   # HYBRID の6案
 node tools/mk_shots.mjs docs/shots/mk_strips.png 14,19,20,21          # ストリップ
 node tools/mk_shots.mjs docs/shots/mk_art.png 9 7,99,3                 # CORNERS の真ん中（絵）
+python3 tools/mk_scene_mock.py docs/shots                              # 真ん中の情景のモック（静止画。Pillow だけ）
 ```
 
 ## 実装
