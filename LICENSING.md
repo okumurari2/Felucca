@@ -51,6 +51,7 @@ All by Hügelton Instruments (Leo Kuroshita), in this tree:
 | X0X by charlesvestal (<https://github.com/charlesvestal/fm1-x0x>), a Felucca fork: the design of the browser emulator (the worklet, the device clock driven by its audio, the exports); its files credit it in their headers | GPL-3.0 | `web/emu/` |
 | DotGothic16 font by The DotGothic16 Project Authors (<https://github.com/fontworks-fonts/DotGothic16>): the browser emulator's knob labels, served with its page (cut to printable ASCII; the font declares no Reserved Font Name) | SIL OFL 1.1 | `web/emu/fonts/DotGothic16-subset.woff`, `LICENSES/OFL-DotGothic16.txt` (also `web/emu/fonts/OFL.txt`) |
 | Fredoka font by The Fredoka Project Authors (<https://github.com/hafontia/Fredoka-One>): the MAKU screen preview styles (`firmware/src/ui_maku_style.c`, the web emulator only), rasterised into the emulator build | SIL OFL 1.1 | `assets/fonts/preview/Fredoka.ttf`, `assets/fonts/preview/OFL-Fredoka.txt` |
+| IBM Plex Mono by IBM Corp. (<https://github.com/IBM/plex>): the MAKU screen preview styles (`firmware/src/ui_maku_style2.c`, the web emulator only) | SIL OFL 1.1 | `assets/fonts/preview/IBMPlexMono-*.ttf`, `assets/fonts/preview/OFL-IBMPlexMono.txt` |
 | JieLi AC79 SDK by JieLi Technology: three of its files go into every `.fwsc` package (below); none are in this tree | Apache-2.0 | `LICENSES/Apache-2.0.txt` |
 
 On the device, HOME held > ABOUT opens the information screen; turning PRESETS scrolls on into

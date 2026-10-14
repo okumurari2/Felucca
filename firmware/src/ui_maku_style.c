@@ -51,8 +51,8 @@ static const mks_t MKS[5] = {
 };
 static uint8_t mk_style;            /* 0: the shipped look; set by the page (web_set_style) */
 
-static int32_t mks_caph(const aafont_t *f) { return f->g[((uint32_t)('H' - f->first)) << f->psh].bh; }
-static int32_t mks_cap(const aafont_t *f) { return f->g[((uint32_t)('H' - f->first)) << f->psh].by; }
+static int32_t mks_caph(const aafont_t *f) { return f->g[glyph(f, '0')].bh; }      /* (a digit: the sparse big faces have no capitals' H) */
+static int32_t mks_cap(const aafont_t *f) { return f->g[glyph(f, '0')].by; }
 static void mks_text(int32_t x, int32_t yc, const aafont_t *f, const char *s, uint16_t c) { cv_text(x, yc - mks_cap(f), f, s, c); }
 static void mks_text_r(int32_t xr, int32_t yc, const aafont_t *f, const char *s, uint16_t c) { cv_text(xr - text_w(f, s), yc - mks_cap(f), f, s, c); }
 static void mks_text_c(int32_t yc, const aafont_t *f, const char *s, uint16_t c, uint16_t bg) { cv_text_in(0, yc - mks_cap(f), MKQ, f, s, c, bg); }
@@ -286,10 +286,16 @@ static void mks_top_left(const mks_t *s, uint32_t f)
     cv_blit(0, 0);
 }
 
+#include "ui_maku_style2.c"          /* looks 5..8 */
+
 static void mks_draw(uint32_t f, uint32_t v, uint32_t redraw)
 {
-    const mks_t *s = &MKS[mk_style];
+    const mks_t *s = &MKS[mk_style < 5 ? mk_style : 1];
     uint32_t j;
+    if (mk_style >= 5) {
+        mkx_draw(f, v, redraw);
+        return;
+    }
     if (ux.mono || ux.light != (mk_style == 2u)) {         /* the emulator's GREY palette would gray every text; MARU is dark ink on light */
         ux.mono = 0;
         ux.light = mk_style == 2u;

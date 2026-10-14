@@ -1,6 +1,6 @@
 # 画面デザイン案のスクショ（プレビュー）
 
-**このディレクトリの絵は常にこの1か所・同じファイル名で更新する**（案ごと・ブランチごとに増やさない）。見るのは `mk_styles.png` 1枚でよい。
+**このディレクトリの絵は常にこの1か所・同じファイル名で更新する**（案ごと・ブランチごとに増やさない）。見るのは比較シート `mk_styles.png`（第1弾）と `mk_styles2.png`（第2弾）の2枚でよい。
 
 ![4案の比較](mk_styles.png)
 
@@ -16,9 +16,35 @@
 
 個別の絵（seed 7）: [現状](style0_now.png) · [1](style1.png) · [2](style2.png) · [3](style3.png) · [4](style4.png)
 
+## 第2弾: かっこいい方面（MAKU の定義から抽象化）
+
+![第2弾の比較](mk_styles2.png)
+
+列は左から 現状 / 5 ORBIT / 6 GRID / 7 HUE / 8 SCOPE。行は第1弾と同じ。
+
+第1弾（FUWA / MARU / RPG / CAVE）は「ジャンルの衣装」だった。第2弾は、MAKU の中身から画面を決めた。
+
+| MAKU の定義 | そこから抜いた原則 |
+| --- | --- |
+| 4つの役は 16・57・13・29 ステップ（互いに素）。ずらしてあるので何時間も同じ並びに戻らない | 周期のずれそのものを描く → **ORBIT** |
+| 保存しない。起動のたびに違う世界 | 世界ごとに見た目が決まる → **HUE**（調 = 色） |
+| 幕間の機械。ステージの裏の暗がりで、ちらっと見るもの | 静かで、一目で読める。数字が主役 → **GRID**（数字を絵にする） |
+| 手のひらの機材。波形は音そのもの | 計器の顔つき（目盛り、残光、LED）→ **SCOPE** |
+
+| 案 | 内容 | 書体 |
+| --- | --- | --- |
+| 5 ORBIT | 4つの輪。ステップごとに目盛りがあり、いまのステップに彗星の尾がつく。中心に BPM、下に「いまの4周期が揃うまで」（72 BPM で約19.9時間） | Inter Tight（細い大きな数字） |
+| 6 GRID | 紙と細い線と朱色ひとつ。巨大な数字が左に寄る。四角と罫線だけ | Inter Tight（太い大きな数字） |
+| 7 HUE | ROOT（調）が画面全体の色相になる。空のような階調、波形は尾根の線、細い数字。KEY を動かすと色がその場で変わる | Inter Tight |
+| 8 SCOPE | 琥珀色の蛍光、目盛り、トレースの残光、定規のゲージ、LED の列 | IBM Plex Mono |
+
+HUE は世界ごとに色が変わるので、同じ案を別の世界で並べたのが下の1枚（調は E、B、B、F#、F#）。
+
+![HUE: 世界ごとの色](hue_keys.png)
+
 ## 触って見る
 
-エミュレーター（`web/emu/build.sh` で作る）の URL に `#style=N`（0〜4）を付ける。`#seed=7&style=4` のように、世界も指定できる。
+エミュレーター（`web/emu/build.sh` で作る）の URL に `#style=N`（0〜8）を付ける。`#seed=7&style=4` のように、世界も指定できる。
 
 ## 撮り直す
 
@@ -26,10 +52,12 @@
 python3 -c "import sys; sys.path.insert(0, 'tools'); import build; build.generate()"   # 初回だけ
 sh web/emu/build.sh                  # emcc が要る
 node tools/mk_shots.mjs              # docs/shots/mk_styles.png を作り直す（Playwright と Chromium が要る）
+node tools/mk_shots.mjs docs/shots/mk_styles2.png 0,5,6,7,8      # 第2弾。引数: 出力、案の列、世界(seed)の列
+node tools/mk_shots.mjs docs/shots/hue_keys.png 7 1,2,3,4,5      # 案が1つなら、その世界を並べる
 ```
 
 ## 実装
 
-- `firmware/src/ui_maku_style.c`: 4案の描画。**エミュレーターだけ**（`-DMK_STYLES`）。出荷ファームには入らない。
+- `firmware/src/ui_maku_style.c`（1〜4）と `ui_maku_style2.c`（5〜8）: 8案の描画。**エミュレーターだけ**（`-DMK_STYLES`）。出荷ファームには入らない。
 - 色・書体・配置は案ごとの表（`MKS`）にあり、同じ描画関数が使う。データとレイアウトの決まりは出荷中の画面と同じ（つまみ1つに1区画）。
-- 追加の書体は `tools/gen_mk_fonts.py`（Fredoka と DotGothic16、どちらも SIL OFL 1.1）。出荷ファームの書体は変えていない。
+- 追加の書体は `tools/gen_mk_fonts.py`（Fredoka、DotGothic16、IBM Plex Mono。どれも SIL OFL 1.1）と、Inter Tight の別の太さ。出荷ファームの書体は変えていない。
