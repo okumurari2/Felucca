@@ -1,6 +1,6 @@
 # 画面デザイン案のスクショ（プレビュー）
 
-**このディレクトリの絵は常にこの1か所・同じファイル名で更新する**（案ごと・ブランチごとに増やさない）。見るのは比較シート `mk_styles.png`（第1弾: 色と書体）、`mk_styles2.png`（第2弾: MAKU の定義から）、`mk_layouts.png`（第3弾: 画面の割り方）、`mk_hybrid.png`（CORNERS と FLANK の合いの子）でよい。
+**このディレクトリの絵は常にこの1か所・同じファイル名で更新する**（案ごと・ブランチごとに増やさない）。見るのは比較シート `mk_styles.png`（第1弾: 色と書体）、`mk_styles2.png`（第2弾: MAKU の定義から）、`mk_layouts.png`（第3弾: 画面の割り方）、`mk_hybrid2.png`（HYBRID の色・書体違い6案）、`mk_strips.png`（ボリュームを背景のストリップにする3案）でよい。
 
 ![4案の比較](mk_styles.png)
 
@@ -57,15 +57,40 @@ HUE は世界ごとに色が変わるので、同じ案を別の世界で並べ�
 | 11 BLOOM | 2×2 のまま、十字が動く。回したつまみの区画が大きくなり、しばらくすると戻る | 区画の位置は動かない。大きさだけが変わる |
 | 12 STAR | 区切り線なし。真ん中から各つまみの角へ光線（長さ = 値）。音量は MASTER の角へ4本の扇 | 光線の向き = つまみの方向 |
 
-### 13 HYBRID（CORNERS と FLANK の合いの子）
+### HYBRID（CORNERS と FLANK の合いの子）: 色と書体違い
 
-![CORNERS / FLANK / HYBRID](mk_hybrid.png)
+![HYBRID 6案](mk_hybrid2.png)
 
-左 2/3 は CORNERS の構図を左のつまみの 2×2 に縮めたもの: 真ん中に4つの輪、SELECT / PRESETS / ALGORITHM はその区画の角の四分円の弧、MASTER の角に いまの役と調。右 1/3 は FLANK と同じく KNOB 1〜4 の4本のフェーダー。本体の左右の並びをそのまま写しつつ、輪を主役にできる。
+列は左から 13 ICE / 14 PARTS / 15 KEY / 16 AMBER / 17 PAPER / 18 PASTEL。行は 世界A / 世界B / SINK を押している間 / SELECT を回した直後 / KNOB 3（音量）を回した直後。
+
+構図は共通: 左 2/3 は CORNERS を左のつまみの 2×2 に縮めたもの（真ん中に **楕円** の4つの輪、SELECT / PRESETS / ALGORITHM は区画の角の四分楕円の弧）。左上に 調 と **テンポ**。右 1/3 は KNOB 1〜4 の4本。輪の中心は、4つの周期が揃うまでの時間（LOOP）。
+
+| 案 | 色の考え方 | 右の KNOB 1〜4 | 書体 |
+| --- | --- | --- | --- |
+| 13 ICE | 単色（氷色）。フォーカス中のパートだけ色がつく | 線とつまみ | Inter Tight |
+| 14 PARTS | **トラックごとに色**（珊瑚・琥珀・緑・青）。輪・目盛り・フェーダー・フォーカスの値と弧が、そのパートの色 | 丸いカプセル | Inter Tight |
+| 15 KEY | 調が色相になる（HUE と同じ）。パートは色相をずらした4色。背景は階調 | 丸いカプセル | Inter Tight（細い数字） |
+| 16 AMBER | 琥珀色の蛍光の単色 | LED の列 | IBM Plex Mono |
+| 17 PAPER | 紙に黒と朱色ひとつ | 線とつまみ | Inter Tight（太め） |
+| 18 PASTEL | 藍の夜にパステルの4色 | 丸いカプセル | Fredoka |
+
+### ボリュームを背景のストリップにする
+
+![ストリップ3案](mk_strips.png)
+
+列は左から 14 PARTS（比較用）/ 19 STRIPS-R / 20 STRIPS-BG / 21 STRIPS-KEY。
+
+| 案 | 内容 |
+| --- | --- |
+| 19 STRIPS-R | 右 1/3 を、暗い4色の縦ストリップに割る。音量の高さまでが、少し明るい |
+| 20 STRIPS-BG | 画面の黒い背景そのものを、暗い4色のストリップ（幅60px）に割る。右の1/3が空くので、構図は画面全体の CORNERS になる |
+| 21 STRIPS-KEY | 20 を、調の色（KEY）で |
+
+どの案も、**音量のつまみを回している間だけ**、そのパートのストリップが明るくなる（シート最下段）。回していないときは、フォーカス中のパートがごくわずかに明るいだけ。
 
 ## 触って見る
 
-エミュレーター（`web/emu/build.sh` で作る）の URL に `#style=N`（0〜13）を付ける。`#seed=7&style=4` のように、世界も指定できる。
+エミュレーター（`web/emu/build.sh` で作る）の URL に `#style=N`（0〜21）を付ける。`#seed=7&style=4` のように、世界も指定できる。
 
 ## 撮り直す
 
@@ -76,11 +101,12 @@ node tools/mk_shots.mjs              # docs/shots/mk_styles.png を作り直す�
 node tools/mk_shots.mjs docs/shots/mk_styles2.png 0,5,6,7,8      # 第2弾。引数: 出力、案の列、世界(seed)の列
 node tools/mk_shots.mjs docs/shots/hue_keys.png 7 1,2,3,4,5      # 案が1つなら、その世界を並べる
 node tools/mk_shots.mjs docs/shots/mk_layouts.png 5,9,10,11,12   # 第3弾
-node tools/mk_shots.mjs docs/shots/mk_hybrid.png 9,10,13         # 合いの子
+node tools/mk_shots.mjs docs/shots/mk_hybrid2.png 13,14,15,16,17,18   # HYBRID の6案
+node tools/mk_shots.mjs docs/shots/mk_strips.png 14,19,20,21          # ストリップ
 ```
 
 ## 実装
 
-- `firmware/src/ui_maku_style.c`（1〜4）、`ui_maku_style2.c`（5〜8）、`ui_maku_style3.c`（9〜13、画面全体を 240×120 の帯2本で描く）: 12案の描画。**エミュレーターだけ**（`-DMK_STYLES`）。出荷ファームには入らない。
+- `firmware/src/ui_maku_style.c`（1〜4）、`ui_maku_style2.c`（5〜8）、`ui_maku_style3.c`（9〜21、画面全体を 240×120 の帯2本で描く）: 21案の描画。**エミュレーターだけ**（`-DMK_STYLES`）。出荷ファームには入らない。
 - 色・書体・配置は案ごとの表（`MKS`）にあり、同じ描画関数が使う。データとレイアウトの決まりは出荷中の画面と同じ（つまみ1つに1区画）。
 - 追加の書体は `tools/gen_mk_fonts.py`（Fredoka、DotGothic16、IBM Plex Mono。どれも SIL OFL 1.1）と、Inter Tight の別の太さ。出荷ファームの書体は変えていない。

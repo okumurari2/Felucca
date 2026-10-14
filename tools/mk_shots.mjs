@@ -4,7 +4,7 @@
 //                                           one style only: a strip of its worlds;
 //                                           needs build/emu: web/emu/build.sh;
 //                                           Playwright with a Chromium, e.g. PLAYWRIGHT_BROWSERS_PATH)
-// Rows: two worlds (#seed=), a verb held (SINK: key "1"), SELECT turned (the arrow keys); columns: the styles given (#style=N).
+// Rows: two worlds (#seed=), a verb held (SINK: key "1"), SELECT turned (the arrow keys), KNOB 3 turned (the wheel); columns: the styles given (#style=N).
 import { createRequire } from "module";
 import http from "http"; import fs from "fs"; import path from "path"; import { execFileSync } from "child_process";
 const require = createRequire(process.env.PW_MODULES || "/opt/node22/lib/node_modules/");
@@ -32,6 +32,11 @@ for (const style of STYLES) for (const seed of SEEDS) {
     for (let i = 0; i < 6; i++) { await pg.keyboard.press("ArrowUp"); await pg.waitForTimeout(40); }   // SELECT turned
     await pg.waitForTimeout(350);
     await pg.locator("#screen").screenshot({ path: `${tiles}/s${style}_turn.png` });
+    const kb = await pg.locator(".hit.knob").nth(6).boundingBox();                       // KNOB 3 (a volume) turned: the wheel over it
+    await pg.mouse.move(kb.x + kb.width / 2, kb.y + kb.height / 2);
+    for (let i = 0; i < 4; i++) { await pg.mouse.wheel(0, -120); await pg.waitForTimeout(40); }
+    await pg.waitForTimeout(150);
+    await pg.locator("#screen").screenshot({ path: `${tiles}/s${style}_vol.png` });
   }
   await pg.close();
 }

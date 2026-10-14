@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 tiles, out = Path(sys.argv[1]), sys.argv[2]
-NAMES = {0: "0 NOW", 1: "1 FUWA", 2: "2 MARU", 3: "3 RPG", 4: "4 CAVE", 5: "5 ORBIT", 6: "6 GRID", 7: "7 HUE", 8: "8 SCOPE", 9: "9 CORNERS", 10: "10 FLANK", 11: "11 BLOOM", 12: "12 STAR", 13: "13 HYBRID"}
+NAMES = {0: "0 NOW", 1: "1 FUWA", 2: "2 MARU", 3: "3 RPG", 4: "4 CAVE", 5: "5 ORBIT", 6: "6 GRID", 7: "7 HUE", 8: "8 SCOPE", 9: "9 CORNERS", 10: "10 FLANK", 11: "11 BLOOM", 12: "12 STAR", 13: "13 ICE", 14: "14 PARTS", 15: "15 KEY", 16: "16 AMBER", 17: "17 PAPER", 18: "18 PASTEL", 19: "19 STRIPS-R", 20: "20 STRIPS-BG", 21: "21 STRIPS-KEY"}
 COLS = [(NAMES[int(n)], int(n)) for n in (sys.argv[3] if len(sys.argv) > 3 else "0,1,2,3,4").split(",")]
 SEEDS = [int(x) for x in (sys.argv[4] if len(sys.argv) > 4 else "7,99").split(",")]
 T, G, HEAD = 360, 14, 44                     # a screen drawn 360 px (1.5x of the 720 px capture), the gap, the header
@@ -19,7 +19,7 @@ if len(COLS) == 1:                           # a strip: one look, its worlds sid
     for i, sd in enumerate(SEEDS):
         sheet.paste(Image.open(tiles / f"s{s_}_w{sd}.png").convert("RGB").resize((T, T), Image.LANCZOS), (G + i * (T + G), HEAD))
 else:
-    ROWS = [f"w{sd}" for sd in SEEDS] + ["sink"] + (["turn"] if all((tiles / f"s{c[1]}_turn.png").exists() for c in COLS) else [])
+    ROWS = [f"w{sd}" for sd in SEEDS] + ["sink"] + [r for r in ("turn", "vol") if all((tiles / f"s{c[1]}_{r}.png").exists() for c in COLS)]
     sheet = Image.new("RGB", (G + len(COLS) * (T + G), HEAD + len(ROWS) * (T + G)), (30, 30, 34))
     d = ImageDraw.Draw(sheet)
     for c, (name, s_) in enumerate(COLS):
