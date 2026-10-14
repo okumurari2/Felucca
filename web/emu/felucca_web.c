@@ -382,6 +382,10 @@ EXPORT void web_enc(uint32_t role, int32_t n)
 }
 /* the world of this visit (maku_world): the page passes a random number before web_boot */
 EXPORT void web_set_seed(uint32_t v) { web_seed = v; }
+/* the preview look of MAKU's screen (ui_maku_style.c; built with -DMK_STYLES): 0 the shipped one */
+#ifdef MK_STYLES
+EXPORT void web_set_style(uint32_t v) { mk_style = (uint8_t)(v < 22u ? v : 0u); ui.force = 1; }
+#endif
 EXPORT void web_master(uint32_t v) { web_master_adc = v > 1023u ? 1023u : v; }
 /* a channel message from Web MIDI, as a USB-MIDI packet arrives (usb.c midi_enqueue): 0 = the ring was full */
 EXPORT uint32_t web_midi(uint32_t status, uint32_t d1, uint32_t d2)
