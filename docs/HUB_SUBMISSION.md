@@ -1,7 +1,8 @@
 # FM-1 Firmware Hub: submission draft
 
-Draft for listing MAKU on <https://fm1.designburgapps.com>. Not part of the firmware; edit freely, then send it the way the
-hub asks (the page says only: released as a `.fwsc` on GitHub, free and open source). Submit after the v0.1 release exists.
+MAKU is listed on <https://fm1.designburgapps.com> (added 12 Oct 2026, v0.1). The hub looks at each project's repository and
+newest release every night, so a new release is picked up without a new submission; the listing's text and its BETA mark
+(shown for a 0.x version, as far as the other listings show) are the hub's. This page is the text MAKU would give it. Not part of the firmware.
 
 ## Fields
 
@@ -10,14 +11,14 @@ hub asks (the page says only: released as a `.fwsc` on GitHub, free and open sou
 | Name | MAKU (幕間機 / maku-ma-ki) |
 | Author | okumurari ([@okumurari2](https://github.com/okumurari2)); based on Felucca by Leo Kuroshita (Hügelton Instruments) |
 | Repository | <https://github.com/okumurari2/maku> |
-| Release | <https://github.com/okumurari2/maku/releases/tag/v0.1> (`maku-0.1.fwsc`) |
+| Release | the newest one: <https://github.com/okumurari2/maku/releases/latest> (v0.1: `maku-0.1.fwsc`) |
 | Licence | GPL-3.0-only |
 | Picture | `docs/screenshot-pulse.png` (the FM-1's screen); logo: `assets/logo.jpg` |
 | Try without hardware | <https://okumurari2.github.io/maku/> |
 
 ## One line
 
-An always-on ambience machine for DJ-event interludes: power it on and a new, random, in-key world is already playing.
+Ambience for DJ-event interludes that learns what you like: power it on and a new, random, in-key world is already playing; keep the ones you love and the next worlds grow from them.
 
 ## Description (EN)
 
