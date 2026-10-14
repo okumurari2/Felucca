@@ -1,6 +1,6 @@
 # 画面デザイン案のスクショ（プレビュー）
 
-**このディレクトリの絵は常にこの1か所・同じファイル名で更新する**（案ごと・ブランチごとに増やさない）。見るのは比較シート `mk_styles.png`（第1弾: 色と書体）、`mk_styles2.png`（第2弾: MAKU の定義から）、`mk_layouts.png`（第3弾: 画面の割り方）の3枚でよい。
+**このディレクトリの絵は常にこの1か所・同じファイル名で更新する**（案ごと・ブランチごとに増やさない）。見るのは比較シート `mk_styles.png`（第1弾: 色と書体）、`mk_styles2.png`（第2弾: MAKU の定義から）、`mk_layouts.png`（第3弾: 画面の割り方）、`mk_hybrid.png`（CORNERS と FLANK の合いの子）でよい。
 
 ![4案の比較](mk_styles.png)
 
@@ -57,9 +57,15 @@ HUE は世界ごとに色が変わるので、同じ案を別の世界で並べ�
 | 11 BLOOM | 2×2 のまま、十字が動く。回したつまみの区画が大きくなり、しばらくすると戻る | 区画の位置は動かない。大きさだけが変わる |
 | 12 STAR | 区切り線なし。真ん中から各つまみの角へ光線（長さ = 値）。音量は MASTER の角へ4本の扇 | 光線の向き = つまみの方向 |
 
+### 13 HYBRID（CORNERS と FLANK の合いの子）
+
+![CORNERS / FLANK / HYBRID](mk_hybrid.png)
+
+左 2/3 は CORNERS の構図を左のつまみの 2×2 に縮めたもの: 真ん中に4つの輪、SELECT / PRESETS / ALGORITHM はその区画の角の四分円の弧、MASTER の角に いまの役と調。右 1/3 は FLANK と同じく KNOB 1〜4 の4本のフェーダー。本体の左右の並びをそのまま写しつつ、輪を主役にできる。
+
 ## 触って見る
 
-エミュレーター（`web/emu/build.sh` で作る）の URL に `#style=N`（0〜12）を付ける。`#seed=7&style=4` のように、世界も指定できる。
+エミュレーター（`web/emu/build.sh` で作る）の URL に `#style=N`（0〜13）を付ける。`#seed=7&style=4` のように、世界も指定できる。
 
 ## 撮り直す
 
@@ -70,10 +76,11 @@ node tools/mk_shots.mjs              # docs/shots/mk_styles.png を作り直す�
 node tools/mk_shots.mjs docs/shots/mk_styles2.png 0,5,6,7,8      # 第2弾。引数: 出力、案の列、世界(seed)の列
 node tools/mk_shots.mjs docs/shots/hue_keys.png 7 1,2,3,4,5      # 案が1つなら、その世界を並べる
 node tools/mk_shots.mjs docs/shots/mk_layouts.png 5,9,10,11,12   # 第3弾
+node tools/mk_shots.mjs docs/shots/mk_hybrid.png 9,10,13         # 合いの子
 ```
 
 ## 実装
 
-- `firmware/src/ui_maku_style.c`（1〜4）、`ui_maku_style2.c`（5〜8）、`ui_maku_style3.c`（9〜12、画面全体を 240×120 の帯2本で描く）: 12案の描画。**エミュレーターだけ**（`-DMK_STYLES`）。出荷ファームには入らない。
+- `firmware/src/ui_maku_style.c`（1〜4）、`ui_maku_style2.c`（5〜8）、`ui_maku_style3.c`（9〜13、画面全体を 240×120 の帯2本で描く）: 12案の描画。**エミュレーターだけ**（`-DMK_STYLES`）。出荷ファームには入らない。
 - 色・書体・配置は案ごとの表（`MKS`）にあり、同じ描画関数が使う。データとレイアウトの決まりは出荷中の画面と同じ（つまみ1つに1区画）。
 - 追加の書体は `tools/gen_mk_fonts.py`（Fredoka、DotGothic16、IBM Plex Mono。どれも SIL OFL 1.1）と、Inter Tight の別の太さ。出荷ファームの書体は変えていない。

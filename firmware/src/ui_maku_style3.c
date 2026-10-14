@@ -181,6 +181,23 @@ static void mkl_cell(uint32_t j, int32_t x0, int32_t y0, int32_t w, int32_t h)
         cv_rect(vx - 3 + i, y0 + h - 14 + i, 7 - 2 * i, 1, cc);
 }
 
+/* KNOB 1..4: four faders on the right strip (x 160..239), in the knobs' order */
+static void mkl_faders(uint32_t f)
+{
+    uint32_t i;
+    cv_rect(160, 0, 1, 240, mk_mix(OB_LINE, OB_TEXT, 25));
+    for (i = 0; i < 4u; i++) {                                        /* KNOB 1..4: four faders, in the knobs' order */
+        int32_t x = 168 + (int32_t)i * 18, top = 24, bot = 214, lvl = trk[i].p[P_LEVEL], y = bot - (bot - top) * lvl / 127;
+        uint16_t c = i == f ? (ui.hot_t && ui.hot_col == i ? OB_TEXT : OB_ACC) : mk_mix(OB_LINE, OB_TEXT, 50);
+        mkl_text(x + 5, 8, &AF_S, MAKU_NUM[i], i == f ? OB_ACC : OB_DIM, 1);
+        cv_rect(x + 5, top, 1, bot - top, OB_LINE);
+        cv_rect(x + 3, y, 5, bot - y, c);
+        cv_rect(x, y - 1, 11, 3, i == f ? OB_TEXT : mk_mix(OB_LINE, OB_TEXT, 70));
+        mkl_text(x + 5, 222, &AF_S, MAKU_TRK_NAME[i][0] == 'P' ? "P" : MAKU_TRK_NAME[i][0] == 'F' ? "F" : MAKU_TRK_NAME[i][0] == 'H' ? "H" : "V",
+                 i == f ? OB_ACC : OB_DIM, 1);
+    }
+}
+
 static void mkl_flank_scene(void)
 {
     static const int16_t R[4] = {12, 19, 26, 33};
@@ -199,17 +216,7 @@ static void mkl_flank_scene(void)
     mkl_cell(2, 80, 120, 80, 120);
     cv_rect(80, 0, 1, 240, OB_LINE);
     cv_rect(0, 119, 160, 1, OB_LINE);
-    cv_rect(160, 0, 1, 240, mk_mix(OB_LINE, OB_TEXT, 25));
-    for (i = 0; i < 4u; i++) {                                        /* KNOB 1..4: four faders, in the knobs' order */
-        int32_t x = 168 + (int32_t)i * 18, top = 24, bot = 214, lvl = trk[i].p[P_LEVEL], y = bot - (bot - top) * lvl / 127;
-        uint16_t c = i == f ? (ui.hot_t && ui.hot_col == i ? OB_TEXT : OB_ACC) : mk_mix(OB_LINE, OB_TEXT, 50);
-        mkl_text(x + 5, 8, &AF_S, MAKU_NUM[i], i == f ? OB_ACC : OB_DIM, 1);
-        cv_rect(x + 5, top, 1, bot - top, OB_LINE);
-        cv_rect(x + 3, y, 5, bot - y, c);
-        cv_rect(x, y - 1, 11, 3, i == f ? OB_TEXT : mk_mix(OB_LINE, OB_TEXT, 70));
-        mkl_text(x + 5, 222, &AF_S, MAKU_TRK_NAME[i][0] == 'P' ? "P" : MAKU_TRK_NAME[i][0] == 'F' ? "F" : MAKU_TRK_NAME[i][0] == 'H' ? "H" : "V",
-                 i == f ? OB_ACC : OB_DIM, 1);
-    }
+    mkl_faders(f);
 }
 
 /* ---- 11 BLOOM ---- */
@@ -345,6 +352,45 @@ static void mkl_star_scene(void)
     cv_text(6, 22, &AF_S, k, OB_TEXT);
 }
 
+/* ---- 13 HYBRID: CORNERS on the left two thirds (the left knobs), FLANK's faders on the right (KNOB 1..4) ---- */
+static void mkl_hybrid_scene(void)
+{
+    static const int16_t R[4] = {18, 28, 38, 48};
+    static const int16_t CX[3] = {159, 0, 159}, CY[3] = {0, 239, 239};        /* the left block's corners: SELECT, PRESETS, ALGORITHM */
+    static const float A0[3] = {1.5707963f, 4.712389f, 3.1415927f};
+    char t[16], k[16];
+    uint32_t j, f = mkl_f;
+    mkl_orbit(80, 124, R, f, 1, 1);
+    for (j = 0; j < 3u; j++) {
+        mkq_t *q = &mkl_q[j];
+        int32_t right = CX[j] > 0, top = CY[j] == 0, xa = right ? 153 : 6, al = right ? 2 : 0;
+        const aafont_t *vf = mkl_fit(&AF_L, &AF_M, q->b, 60), *nf = mkl_fit(&AF_M, &AF_S, q->name, 58);
+        uint16_t cc = q->gray ? mk_mix(OB_ACC, OB_BG, q->gray) : OB_ACC;
+        mkl_arc(CX[j], CY[j], 76, 4.0f, A0[j], A0[j] + 1.5707963f, OB_LINE, OB_BG);
+        if (q->val > 0)
+            mkl_arc(CX[j], CY[j], 76, 4.0f, A0[j], A0[j] + 1.5707963f * (float)q->val / 127.0f, cc, OB_BG);
+        if (top) {                                                    /* (inside the arc: the knob's name on the edge) */
+            mkl_text(xa, 6, &AF_S, q->label, OB_DIM, al);
+            mkl_text(xa, 20, nf, q->name, OB_TEXT, al);
+            mkl_text(xa, 37, vf, q->b, cc, al);
+        } else {
+            mkl_text(xa, 186, vf, q->b, cc, al);
+            mkl_text(xa, 212, nf, q->name, OB_TEXT, al);
+            mkl_text(xa, 228, &AF_S, q->label, OB_DIM, al);
+        }
+        if (q->title[0])
+            mkl_text(6, 50, &AF_M, q->title, OB_ACC, 0);
+    }
+    mkl_title(t, f);
+    if (ui.msg_t)
+        cv_text(6, 4, &AF_S, ui.msg, OB_ACC);
+    else
+        cv_text(6, 3, &AF_M, t, OB_ACC);
+    mkl_key(k);
+    cv_text(6, 22, &AF_S, k, OB_TEXT);
+    mkl_faders(f);
+}
+
 static void mkl_draw(uint32_t f, uint32_t v)
 {
     uint32_t j, band;
@@ -361,6 +407,7 @@ static void mkl_draw(uint32_t f, uint32_t v)
         case 9: mkl_corners_scene(); break;
         case 10: mkl_flank_scene(); break;
         case 11: mkl_bloom_scene(); break;
+        case 13: mkl_hybrid_scene(); break;
         default: mkl_star_scene(); break;
         }
         cv_oy = 0;

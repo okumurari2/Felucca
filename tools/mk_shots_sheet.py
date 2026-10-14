@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
 tiles, out = Path(sys.argv[1]), sys.argv[2]
-NAMES = {0: "0 NOW", 1: "1 FUWA", 2: "2 MARU", 3: "3 RPG", 4: "4 CAVE", 5: "5 ORBIT", 6: "6 GRID", 7: "7 HUE", 8: "8 SCOPE", 9: "9 CORNERS", 10: "10 FLANK", 11: "11 BLOOM", 12: "12 STAR"}
+NAMES = {0: "0 NOW", 1: "1 FUWA", 2: "2 MARU", 3: "3 RPG", 4: "4 CAVE", 5: "5 ORBIT", 6: "6 GRID", 7: "7 HUE", 8: "8 SCOPE", 9: "9 CORNERS", 10: "10 FLANK", 11: "11 BLOOM", 12: "12 STAR", 13: "13 HYBRID"}
 COLS = [(NAMES[int(n)], int(n)) for n in (sys.argv[3] if len(sys.argv) > 3 else "0,1,2,3,4").split(",")]
 SEEDS = [int(x) for x in (sys.argv[4] if len(sys.argv) > 4 else "7,99").split(",")]
 T, G, HEAD = 360, 14, 44                     # a screen drawn 360 px (1.5x of the 720 px capture), the gap, the header
