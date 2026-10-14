@@ -5,7 +5,9 @@
 [![License: GPL-3.0-only](https://img.shields.io/badge/license-GPL--3.0--only-blue.svg)](LICENSE)
 
 **MAKU (幕間機)** is an always-on ambience machine firmware for the M-VAVE FM-1: power it on and a new, random,
-in-key world is already playing. Four parts (a pulse, a floor, a haze, a voice), four volume knobs, three macros per
+in-key world is already playing, and the more you like, the more the next ones come from your taste.
+Other ambient firmwares for the FM-1 have you pick a piece and tend it (e.g. [AMB-1](https://github.com/charlesvestal/fm1-amb));
+MAKU starts from a different world on every boot and grows from your likes. Four parts (a pulse, a floor, a haze, a voice), four volume knobs, three macros per
 part, and buttons that are verbs (sink, cascade, swell, wobble, lift, scramble, drift). Nothing is saved but your
 likes: every boot is a new world, HOME held makes another, and REC marks one you like; the more you like, the more
 the new worlds come from your likes (a little changed), so MAKU grows to your taste.
@@ -39,6 +41,7 @@ Build it yourself: [BUILDING.md](BUILDING.md).
 
 Start here:
 
+- [docs/RELEASE_1.0.md](docs/RELEASE_1.0.md): release notes of v1.0, with what sets MAKU apart (Japanese / English)
 - [docs/RELEASE_0.1.md](docs/RELEASE_0.1.md): release notes of v0.1 (Japanese / English)
 - [docs/ABOUT.md](docs/ABOUT.md): the idea, what it does now and what is open (Japanese / English)
 - [docs/SPEC.md](docs/SPEC.md): the current spec in one self-contained page (English), and a map of the docs

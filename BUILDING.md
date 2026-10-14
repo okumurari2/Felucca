@@ -146,7 +146,7 @@ starts, recovery needs [FM-1-transporter](https://github.com/kurogedelic/FM-1-tr
 
 ## Releasing
 
-1. `./build.sh --release 0.1` (identity `FM-1_901`, version string `v0.1`); check `build/release-0.1/`.
-2. Tag `v0.1` and create a GitHub release: the body is `docs/RELEASE_0.1.md`; attach everything in `build/release-0.1/`
-   (the `.fwsc`, the app `.bin`, `SHA256SUMS`, the attribution and licence files).
-3. Then list it on the FM-1 Firmware Hub ([docs/HUB_SUBMISSION.md](docs/HUB_SUBMISSION.md)).
+1. `./build.sh --release X.Y` (identity `FM-1_9XY`, version string `vX.Y`; 0.1 is `FM-1_901`, 1.0 is `FM-1_910`); check `build/release-X.Y/`.
+2. Tag `vX.Y` and create a GitHub release: the body is `docs/RELEASE_X.Y_github.md` (the same notes as `docs/RELEASE_X.Y.md` with the links made
+   absolute); attach everything in `build/release-X.Y/` (the `.fwsc`, the app `.bin`, `SHA256SUMS`, the attribution and licence files).
+3. The FM-1 Firmware Hub looks at each project's newest release every night; a new project is listed on it ([docs/HUB_SUBMISSION.md](docs/HUB_SUBMISSION.md)).
