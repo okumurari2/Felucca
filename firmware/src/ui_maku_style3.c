@@ -263,6 +263,8 @@ static void mkl_art(int32_t cx, int32_t cy, int32_t R, uint32_t f)
         }
 }
 
+#include "ui_maku_scene.c"                                           /* 22..24: the middle as a piece of nature */
+
 /* ---- 9 CORNERS ---- */
 static void mkl_corners_scene(void)
 {
@@ -272,7 +274,10 @@ static void mkl_corners_scene(void)
     char t[16], k[16], b[8];
     uint32_t j, i, f = mkl_f;
     (void)R;
-    mkl_art(120, 120, 66, f);
+    if (mk_style >= 22u)
+        mkl_scene(mk_style - 22u, f);
+    else
+        mkl_art(120, 120, 66, f);
     for (j = 0; j < 3u; j++) {                                        /* a quarter arc around each knob's corner */
         mkq_t *q = &mkl_q[j];
         float a0 = A0[j], a1 = a0 + 1.5707963f * (float)q->val / 127.0f;
@@ -774,7 +779,7 @@ static void mkl_draw(uint32_t f, uint32_t v)
         mkq_get(&mkl_q[j], j, f, v);
     if (mk_style == 11u)
         mkl_bloom_step();
-    if (mk_style >= 13u) {                                            /* the six HYBRID looks */
+    if (mk_style >= 13u && mk_style < 22u) {                          /* the HYBRID looks */
         const hyp_t *P = &HY[mk_style - 13u];
         if (P->key) {                                                 /* KEY: the hue from ROOT, a sky from wine to the key's colour */
             static const int16_t O[4] = {0, 34, 68, 150};
@@ -798,11 +803,11 @@ static void mkl_draw(uint32_t f, uint32_t v)
             ux.gen++;
         }
     }
-    bg0 = mk_style >= 13u ? hy_c.bg0 : OB_BG;
+    bg0 = mk_style >= 13u && mk_style < 22u ? hy_c.bg0 : OB_BG;
     for (band = 0; band < 2u; band++) {                               /* the whole screen, in two strips */
         cv_begin(240, 120, bg0);
         cv_oy = -(int32_t)(band * 120u);
-        if (mk_style >= 13u && hy_c.bg0 != hy_c.bg1) {
+        if (mk_style >= 13u && mk_style < 22u && hy_c.bg0 != hy_c.bg1) {
             int32_t y;
             for (y = 0; y < 240; y++)
                 cv_rect(0, y, 240, 1, hy_bg(y));
@@ -812,6 +817,7 @@ static void mkl_draw(uint32_t f, uint32_t v)
         case 10: mkl_flank_scene(); break;
         case 11: mkl_bloom_scene(); break;
         case 12: mkl_star_scene(); break;
+        case 22: case 23: case 24: mkl_corners_scene(); break;
         default: mkl_hybrid_scene(); break;
         }
         cv_oy = 0;

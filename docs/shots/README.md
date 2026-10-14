@@ -57,6 +57,17 @@ HUE は世界ごとに色が変わるので、同じ案を別の世界で並べ�
 | 11 BLOOM | 2×2 のまま、十字が動く。回したつまみの区画が大きくなり、しばらくすると戻る | 区画の位置は動かない。大きさだけが変わる |
 | 12 STAR | 区切り線なし。真ん中から各つまみの角へ光線（長さ = 値）。音量は MASTER の角へ4本の扇 | 光線の向き = つまみの方向 |
 
+### CORNERS の真ん中: 自然の情景、エミュレーターで動く（#style=22〜24）
+
+![水辺・森の地面・海辺](mk_scene_live.png)
+
+列は左から 22 WATER / 23 FOREST / 24 SEA。行は 世界A / 世界B / SINK を押している間 / SELECT を回した直後 / KNOB 3（音量）を回した直後。モックの3題材を `firmware/src/ui_maku_scene.c`（`-DMK_STYLES` のみ。出荷ファームは不変）で動かしたもの。
+
+- キックの拍で、しずく（水辺）/ 木の実（森）/ 寄せる波（海）。アルペジオの1音で、葉（水辺・森。音の高さが落ちてくる場所）/ 鳥（海。音の高さが飛ぶ高さ）。
+- 作用: 風が葉を押す。水に落ちた葉は流れに運ばれる。波紋が葉を持ち上げる。キックが流れと風を一瞬沈める（DUCK）。
+- 季節は調から（C〜D 春 / D#〜F 夏 / F#〜G# 秋 / A〜B 冬）。マイナー系の音階は夕方の色。動詞は出来事: SINK 潜る、LIFT 日が差す、SWELL うねる、WOBBLE 葉が巻く、CASCADE 葉が降る、SCRAMBLE 突風。DRIFT がオンなら雲が横切る。
+- 世界は seed で変わる: `#seed=99&style=23`。動きを見るなら、ブラウザで開いて鍵盤とつまみを触る。
+
 ### CORNERS の真ん中: 自然の情景にする計画（静止画のモック）
 
 ![題材 × 季節](mk_scene_seasons.png)
@@ -129,6 +140,7 @@ node tools/mk_shots.mjs docs/shots/mk_layouts.png 5,9,10,11,12   # 第3弾
 node tools/mk_shots.mjs docs/shots/mk_hybrid2.png 13,14,15,16,17,18   # HYBRID の6案
 node tools/mk_shots.mjs docs/shots/mk_strips.png 14,19,20,21          # ストリップ
 node tools/mk_shots.mjs docs/shots/mk_art.png 9 7,99,3                 # CORNERS の真ん中（絵）
+node tools/mk_shots.mjs docs/shots/mk_scene_live.png 22,23,24 7,99     # 真ん中の情景（動く）
 python3 tools/mk_scene_mock.py docs/shots                              # 真ん中の情景のモック（静止画。Pillow だけ）
 ```
 
