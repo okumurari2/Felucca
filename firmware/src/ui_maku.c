@@ -141,7 +141,8 @@ static void mq_verb(uint32_t j, uint32_t v)
 }
 
 /* a new world (power-on, HOME held, a like) names its kit once, after its message: the floor's, the haze's and the voice's sound,
- * one after another in the track's colour (~0.75 s each), then the focused track again. DRIFT's change of voice stays quiet */
+ * one after another in the track's colour (~0.75 s each), then its background bed if it has one ("~ SURF", in the text's colour),
+ * then the focused track again. DRIFT's change of voice stays quiet */
 #define MK_KIT_F 45u
 static uint16_t mk_kit_world, mk_kit_t;
 
@@ -180,21 +181,28 @@ static void mq_top_left(void)
         str_cpy(t + str_len(t), MAKU_TRK_NAME[f], sizeof t - str_len(t));
         if (mk_kit_world != maku.world_n) {
             mk_kit_world = maku.world_n;
-            mk_kit_t = 3u * MK_KIT_F;
+            mk_kit_t = (maku.bg ? 4u : 3u) * MK_KIT_F;
         }
         if (ui.msg_t)                                   /* (the small face: a message may be long) */
             cv_text(6, 8, &AF_S, ui.msg, T_ACCENT);
-        else if (mk_kit_t) {                            /* the kit: "2 DRONE STRING", "3 RAIN", "4 KALIMBA" */
-            uint32_t k = MAKU_DRA + 2u - (mk_kit_t - 1u) / MK_KIT_F;
+        else if (mk_kit_t) {                            /* the kit: "2 DRONE STRING", "3 RAIN", "4 KALIMBA", "~ SURF" */
+            uint32_t n = maku.bg ? 4u : 3u, k = MAKU_DRA + (n - 1u) - (mk_kit_t - 1u) / MK_KIT_F;
             mk_kit_t--;
-            if (maku.voice[k] != 0xFFu) {
+            if (k <= MAKU_ARP && maku.voice[k] != 0xFFu) {
                 str_cpy(t, MAKU_NUM[k], sizeof t);
                 str_cpy(t + str_len(t), " ", sizeof t - str_len(t));
                 str_cpy(t + str_len(t), MAKU_V[k].v[maku.voice[k]].name, sizeof t - str_len(t));
+            } else if (k > MAKU_ARP) {
+                str_cpy(t, "~ ", sizeof t);
+                str_cpy(t + str_len(t), BG_NAME[maku.bg], sizeof t - str_len(t));
+            } else
+                t[0] = 0;
+            if (t[0]) {
+                uint16_t c = k > MAKU_ARP ? T_TEXT : mk_ink(k);
                 if (text_w(&AF_M, t) <= MKQ - 12)
-                    cv_text(6, 4, &AF_M, t, mk_ink(k));
+                    cv_text(6, 4, &AF_M, t, c);
                 else
-                    cv_text(6, 8, &AF_S, t, mk_ink(k));
+                    cv_text(6, 8, &AF_S, t, c);
             }
         } else
             cv_text(6, 4, &AF_M, t, mk_ink(f));

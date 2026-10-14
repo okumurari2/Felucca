@@ -28,6 +28,7 @@
 #define MAKU_REST 255u
 #define MAKU_CUE_VEL 44u         /* the breath's cue (the kick, w > 1/2): soft */
 #define MAKU_TABLE 32u
+#define MAKU_DRN 17u             /* DRIFT's walked values: the 12 macros, BPM, SWING, DUCK, drs, the bed's level */
 #define MAKU_PK 8u               /* the played notes the field remembers; a new one pushes out the weakest (the oldest) */
 
 /* The verbs that hold three parameters of their own: while the button is held the screen shows them and SELECT / PRESETS /
@@ -72,8 +73,8 @@ static struct {
     uint8_t dr_on;               /* DRIFT is on and has taken its anchors */
     uint16_t dr_t;               /* DRIFT's clock: a step of the walk every 64 (small, frequent steps: the numbers glide) */
     uint8_t drs;                 /* the space DRIFT has added (0..127): the sends rise and the master's low-pass closes; it stays when switched off */
-    int16_t dra[16];             /* DRIFT's anchors, taken at the switch-on: the 12 macros, BPM, TEMPO's SWING and DUCK, drs */
-    int16_t drw[16];             /* .. and what it last left there: a value found changed since was moved by hand, and is the new anchor */
+    int16_t dra[MAKU_DRN];       /* DRIFT's anchors, taken at the switch-on: the 12 macros, BPM, TEMPO's SWING and DUCK, drs, the bed's level */
+    int16_t drw[MAKU_DRN];       /* .. and what it last left there: a value found changed since was moved by hand, and is the new anchor */
     uint32_t sw_t, sw_at;        /* DRIFT's change of voice: blocks counted, and the count at which the next part is asked to change (MAKU_SW_BLOCKS) */
     uint8_t sw_want, sw_go;      /* .. bit i: part i is asked to change at its next rest (maku_step); it has reached it, the main loop changes it (maku_voice_swap) */
     uint8_t sw_last;             /* .. the part changed last (never twice in a row) */
@@ -106,6 +107,7 @@ static struct {
                                   * change) starts darker and opens by itself, so the first strikes do not startle; once open, the player's TONE is untouched */
     uint8_t vs[4];               /* .. how fast it opens, per block (maku_block) */
     uint8_t pm[4];               /* how far each part's pitch may waver (PM_*; the floor and the haze, drawn per world) */
+    uint8_t bg, bgl;             /* the background bed of the world (bg.c: BG_*; 0 none) and its level 0..127: DRIFT moves the level, SWELL and SINK the mix (maku_block) */
 } maku;
 
 /* How far a part's pitch may waver (docs/decisions.md 2026-10-11): a world draws one level for the floor and one for the
@@ -791,7 +793,7 @@ static void maku_over(uint32_t slot, uint32_t t, uint32_t p, int32_t off, int32_
 
 /* DRIFT, once per block: while it is on the values it reaches wander, a step of the walk now and then, never further from where
  * they were at the switch-on than RANGE says (a value moved by hand meanwhile is the new place to stay near), and stay where they
- * land. REACH: the 12 macros; from 43 the space; from 86 the tempo, swing and duck too (the tempo only on its own clock) */
+ * land. REACH: the 12 macros and the bed's level; from 43 the space; from 86 the tempo, swing and duck too (the tempo only on its own clock) */
 #define MAKU_SW_BLOCKS 55000u   /* DRIFT changes the voice of one of the floor, the haze or the arp every 40 s (44.1 kHz, 32-sample blocks) and up to 20 s more */
 static int32_t maku_walk(int32_t v, int32_t a, int32_t span, int32_t top)
 {
@@ -801,7 +803,8 @@ static int32_t maku_walk(int32_t v, int32_t a, int32_t span, int32_t top)
 }
 static int32_t maku_dr_get(uint32_t k)
 {
-    return k < 12u ? maku.m[k / 3u][k % 3u] : k == 12u ? song.g[G_BPM] : k == 13u ? maku.vp[VB_GLO][1] : k == 14u ? maku.vp[VB_GLO][2] : maku.drs;
+    return k < 12u ? maku.m[k / 3u][k % 3u] : k == 12u ? song.g[G_BPM] : k == 13u ? maku.vp[VB_GLO][1] : k == 14u ? maku.vp[VB_GLO][2] :
+           k == 15u ? maku.drs : maku.bgl;
 }
 static void maku_dr_put(uint32_t k, int32_t v)
 {
@@ -811,8 +814,10 @@ static void maku_dr_put(uint32_t k, int32_t v)
         song.g[G_BPM] = (int16_t)v;
     else if (k < 15u)
         maku.vp[VB_GLO][k - 12u] = (uint8_t)v;
-    else
+    else if (k == 15u)
         maku.drs = (uint8_t)v;
+    else
+        maku.bgl = (uint8_t)v;
 }
 static void maku_drift(void)
 {
@@ -823,7 +828,7 @@ static void maku_drift(void)
         return;
     }
     if (!maku.dr_on) {
-        for (k = 0; k < 16u; k++)
+        for (k = 0; k < MAKU_DRN; k++)
             maku.dra[k] = maku.drw[k] = (int16_t)maku_dr_get(k);
         maku.dr_on = 1;
         maku.dr_t = 0;
@@ -844,8 +849,10 @@ static void maku_drift(void)
         return;
     maku.dr_t = (uint16_t)(maku.dr_t - 64u);
     span = maku.vp[VB_DRIFT][1] / 2;
-    for (k = 0; k < 16u; k++) {
+    for (k = 0; k < MAKU_DRN; k++) {
         if (k == 0u)                                    /* the kick's DENSITY (macro 0 of track 0) is never drifted */
+            continue;
+        if (k == 16u && !maku.bg)                       /* (no bed: no level to wander) */
             continue;
         if (k >= 12u && k < 15u && reach < 86)
             continue;
@@ -994,18 +1001,25 @@ static __attribute__((noinline)) void maku_block(void)
     if (!maku.on) {
         maku.bw = 0;
         maku.bd = 0;
+        bg_req = 0;                                                 /* (the bed fades out) */
         return;
     }
+    bg_req = maku.bg;                                               /* the bed (bg.c): its world's type and level, and what SWELL and SINK do to it */
+    bg_lvl = maku.bgl;
     maku_breath_step();
     maku_breath_env();
     maku_env(VB_SINK);
     for (i = VB_SCRAM; i < VB_N; i++)
         if (i != VB_DRIFT)
             maku_env(i);
-    if (((maku.hv & ~maku.pp) >> VB_SWELL) & 1u)                    /* SWELL pressed: the floor and the haze strike their chord again */
+    if (((maku.hv & ~maku.pp) >> VB_SWELL) & 1u) {                  /* SWELL pressed: the floor and the haze strike their chord again, a surf sends a big wave */
         maku.rst = 3u;
+        bg_kick = 1;
+    }
     maku.pp = maku.hv;
     maku_drift();
+    bg_sw = maku.va[VB_SWELL];
+    bg_dv = (int16_t)maku_dive();
     for (i = 1; i < 4u; i++)                                       /* a new voice's veil opens (maku_macro_set) */
         if (maku.vl[i] != 0xFFFFu) {
             maku.vl[i] = (uint16_t)(maku.vl[i] + maku.vs[i] > 0xFFFFu ? 0xFFFFu : maku.vl[i] + maku.vs[i]);

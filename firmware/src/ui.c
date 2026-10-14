@@ -1190,6 +1190,9 @@ static void maku_setup(void)
     song.g[G_BPM] = 72;
     maku.on = 1;
     fx_deess = 1;                                      /* (the master's high-band compressor, fx.c: MAKU only) */
+    fx_bg = 1;                                         /* (and the background bed, bg.c: a world gives it its type; none until then) */
+    maku.bg = BG_NONE;
+    maku.bgl = 0;
     maku.hv = maku.verb = 0;                           /* (the verbs held, and the drones' last steps SWELL replays) */
     maku.pp = maku.rst = 0;
     memset(maku.va, 0, sizeof maku.va);
@@ -1247,6 +1250,39 @@ static void maku_pm_draw(uint8_t *a, uint8_t *b)
     if (*a == PM_WARP && *b == PM_WARP)
         *a = PM_SWAY;
 }
+/* the world's background bed (bg.c): by weight, none in four of ten, else a type and a small level; the haze's own WIND or RAIN
+ * (NOISE rows 9, 10) are not doubled by a BREEZE or a SHOWER (none then). It draws from a stream of its own, and puts the main one
+ * back, so everything else a seed decides is as it was before the bed. A like keeps both (maku_fav.c; bgq is the level in steps of 4) */
+#define MAKU_BGQ_MAX 31u
+static void maku_bed_pick(uint8_t *type, uint8_t *bgq)
+{
+    static const uint8_t W[BG_N] = {40, 12, 10, 10, 9, 9, 10};
+    uint32_t x = rng() % 100u, t;
+    for (t = 0; t < BG_N - 1u && x >= W[t]; t++)
+        x -= W[t];
+    *type = (uint8_t)t;
+    *bgq = t ? (uint8_t)(7u + rng() % 9u) : 0u;                 /* the level 28 .. 60 (of 127; DRIFT moves it) */
+}
+static void maku_bed_set(uint32_t type, uint32_t bgq)
+{
+    uint32_t haze = maku.voice[MAKU_DRB] != 0xFFu ? MAKU_V[MAKU_DRB].v[maku.voice[MAKU_DRB]].id : 0u;
+    if ((type == BG_BREEZE && haze == 9u && MAKU_V[MAKU_DRB].v[maku.voice[MAKU_DRB]].eng == MAKU_ENGI_NOISE) ||
+        (type == BG_SHOWER && haze == 10u && MAKU_V[MAKU_DRB].v[maku.voice[MAKU_DRB]].eng == MAKU_ENGI_NOISE))
+        type = BG_NONE;
+    maku.bg = (uint8_t)type;
+    maku.bgl = type ? (uint8_t)(bgq * 4u) : 0u;
+}
+static void maku_bed_draw(uint32_t seed)
+{
+    uint32_t keep = rng_state, k;
+    uint8_t t, q;
+    rng_state = maku_hash(seed ^ 0x44454242u) | 1u;             /* ("BEDD") */
+    for (k = 0; k < 4u; k++)
+        (void)rng();
+    maku_bed_pick(&t, &q);
+    rng_state = keep;
+    maku_bed_set(t, q);
+}
 static void maku_world(uint32_t seed)
 {
     uint32_t i, j;
@@ -1297,6 +1333,7 @@ static void maku_world(uint32_t seed)
     for (i = 0; i < 4u; i++)                                  /* (the kick's DENSITY first) */
         for (j = 0; j < 3u; j++)
             maku_macro_set(i, j, maku_macro_draw(i, j));
+    maku_bed_draw(seed);
 }
 #include "maku_fav.c"                                  /* the likes: REC keeps a world, a new world is drawn from them */
 /* HOME held: a new world, from the time since boot and the knobs' last turns; with likes kept, often one of them

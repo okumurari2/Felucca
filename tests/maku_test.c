@@ -1571,6 +1571,8 @@ static uint32_t world_sig(void)
     MIX(maku.open);
     MIX(maku.loose);
     MIX(fx_rvs);
+    MIX(maku.bg);
+    MIX(maku.bgl);
 #undef MIX
     return h;
 }
@@ -1916,9 +1918,381 @@ static int pitch_levels(void)
     return bad;
 }
 
+
+/* THE BED (bg.c): a world's background texture. Rendered through bg_block alone (the parts are silent), 44.1 kHz, blocks of CTL */
+static double bed_rms, bed_peak, bed_mean;
+static int16_t bed_sw, bed_dv;                           /* SWELL's and SINK's amounts bed_run starts with (Q12) */
+static double bed_win[2048];
+static uint32_t bed_nwin;
+static int32_t bed_sr_sum;
+/* `secs` seconds of type `type` at `lvl` (the first second is run and not counted); sums into bed_*; the windows' RMS (0.5 s) in bed_win */
+static void bed_run(uint32_t type, uint32_t lvl, double secs)
+{
+    static int32_t ml[CTL], mr[CTL], sr[CTL];
+    uint32_t b, nb = (uint32_t)(secs * FS / CTL), skip = FS / CTL, i, wn = FS / 2u / CTL, wb = 0;
+    double sq = 0, mean = 0, wsq = 0;
+    uint64_t n = 0;
+    memset(&bg, 0, sizeof bg);
+    bg_req = (uint8_t)type;
+    bg_lvl = (uint8_t)lvl;
+    bg_sw = bed_sw;
+    bg_dv = bed_dv;
+    bg_kick = 0;
+    fx_bg = 1;
+    bed_peak = 0;
+    bed_nwin = 0;
+    bed_sr_sum = 0;
+    for (b = 0; b < nb + skip; b++) {
+        memset(ml, 0, sizeof ml);
+        memset(mr, 0, sizeof mr);
+        memset(sr, 0, sizeof sr);
+        bg_block(ml, mr, sr, CTL);
+        if (b < skip)
+            continue;
+        for (i = 0; i < CTL; i++) {
+            double l = ml[i], r = mr[i], m = (l + r) / 2;
+            sq += l * l + r * r;
+            wsq += m * m;
+            mean += m;
+            n += 2;
+            if (fabs(l) > bed_peak) bed_peak = fabs(l);
+            if (fabs(r) > bed_peak) bed_peak = fabs(r);
+            bed_sr_sum += sr[i] < 0 ? -sr[i] : sr[i];
+        }
+        if (++wb == wn) {
+            if (bed_nwin < 2048u)
+                bed_win[bed_nwin++] = sqrt(wsq / (wn * CTL));
+            wb = 0;
+            wsq = 0;
+        }
+    }
+    bed_rms = sqrt(sq / (double)n);
+    bed_mean = mean / (double)(n / 2u);
+}
+static int bed(void)
+{
+    int bad = 0, ok;
+    uint32_t t, s, i, cnt[BG_N];
+    static const double RMS_AIM[BG_N] = {0, 300, 300, 300, 250, 150, 300};     /* at LEVEL 64, at the master's scale (bg.c BG_NORM) */
+    /* every type: the level it is meant to have, no DC, within range at the top, silent at LEVEL 0 and with the bed off */
+    for (t = 1, ok = 1; t < BG_N; t++) {
+        double r64, r127, r0, pk127, rd;
+        bed_run(t, 64, 40.0);
+        r64 = bed_rms;
+        rd = bed_mean < 0 ? -bed_mean : bed_mean;
+        printf("ui:   bed %-8s LEVEL 64: RMS %.0f (aim %.0f), mean %.1f, peak %.0f\n", BG_NAME[t], r64, RMS_AIM[t], bed_mean, bed_peak);
+        ok &= r64 > RMS_AIM[t] * 0.6 && r64 < RMS_AIM[t] * 1.4 && rd < 20.0;
+        bed_run(t, 127, 40.0);
+        r127 = bed_rms;
+        pk127 = bed_peak;
+        ok &= r127 > r64 * 3.8 && r127 < r64 * 4.1;                         /* the square law: (127 / 64)^2 = 3.94 (the same 40 s of noise) */
+        bed_sw = 4096;                                                       /* .. and SWELL on top (x2): still well inside the mix */
+        bed_run(t, 127, 40.0);
+        bed_sw = 0;
+        ok &= bed_peak < 28000.0 && pk127 < 16000.0;
+        printf("ui:   bed %-8s LEVEL 127: RMS %.0f, peak %.0f; with SWELL peak %.0f\n", BG_NAME[t], r127, pk127, bed_peak);
+        bed_run(t, 0, 3.0);
+        r0 = bed_rms;
+        ok &= r0 == 0.0;
+    }
+    bad += check("BED: each type at LEVEL 64 within +-40 % of its aim (300 / 300 / 300 / 250 / 150 / 300), no DC, square law to 127 and nothing near full scale even with SWELL", ok);
+    {
+        static int32_t ml[CTL], mr[CTL], sr[CTL];
+        memset(&bg, 0, sizeof bg);
+        fx_bg = 0;
+        bg_req = BG_SURF;
+        bg_lvl = 127;
+        memset(ml, 0, sizeof ml); memset(mr, 0, sizeof mr); memset(sr, 0, sizeof sr);
+        for (i = 0; i < 400u; i++)
+            bg_block(ml, mr, sr, CTL);
+        for (i = 0, ok = 1; i < CTL; i++)
+            ok &= !ml[i] && !mr[i] && !sr[i];
+        bad += check("BED: with the mode off (fx_bg 0) the mix is not touched", ok && bg.type == BG_NONE);
+        fx_bg = 1;
+    }
+    /* the sea: waves of 8..14 s, each rising and withdrawing */
+    {
+        uint32_t peaks = 0, k;
+        double lo = 1e9, hi = 0, sm[2048];
+        bed_run(BG_SURF, 64, 90.0);
+        for (k = 0; k < bed_nwin; k++) {                                     /* (a 3-window mean: 1.5 s) */
+            double a = bed_win[k > 0 ? k - 1 : 0], b = bed_win[k], c = bed_win[k + 1 < bed_nwin ? k + 1 : k];
+            sm[k] = (a + b + c) / 3.0;
+            lo = sm[k] < lo ? sm[k] : lo;
+            hi = sm[k] > hi ? sm[k] : hi;
+        }
+        for (k = 4; k + 4 < bed_nwin; k++)
+            peaks += sm[k] > sm[k - 1] && sm[k] >= sm[k + 1] && sm[k] > lo + (hi - lo) * 0.45 && sm[k] > sm[k - 4] * 1.5 && sm[k] > sm[k + 4] * 1.5;
+        printf("ui:   surf over 90 s: swell (1.5 s mean) %.0f .. %.0f, %u waves\n", lo, hi, peaks);
+        bad += check("BED: SURF swells and withdraws (the quietest 1.5 s at most a third of the loudest) in 6..11 waves in 90 s (8..14 s each)",
+                     hi > lo * 3.0 && peaks >= 6u && peaks <= 11u);
+    }
+    /* SWELL calls a big wave: a surf's next wave starts now and is higher */
+    {
+        double a, b;
+        bed_run(BG_SURF, 64, 30.0);
+        a = bed_rms;
+        {
+            static int32_t ml[CTL], mr[CTL], sr[CTL];
+            double sq = 0, pk = 0;
+            memset(&bg, 0, sizeof bg);
+            bed_run(BG_SURF, 64, 0.01);
+            bg_kick = 1;
+            for (i = 0; i < 9u * FS / CTL; i++) {
+                uint32_t k;
+                memset(ml, 0, sizeof ml); memset(mr, 0, sizeof mr); memset(sr, 0, sizeof sr);
+                bg_block(ml, mr, sr, CTL);
+                for (k = 0; k < CTL; k++) {
+                    sq += (double)ml[k] * ml[k];
+                    pk = fabs((double)ml[k]) > pk ? fabs((double)ml[k]) : pk;
+                }
+            }
+            b = sqrt(sq / (9u * FS));
+            ok = bg.u.surf.big == 1u || bg.u.surf.ph != 0u;
+            printf("ui:   surf: a normal 30 s RMS %.0f; the 9 s after SWELL's wave RMS %.0f, peak %.0f\n", a, b, pk);
+        }
+        bad += check("BED: SWELL's wave is taken by a surf (bg_kick cleared) and is a loud one", !bg_kick && b > a * 0.9 && ok);
+        bg_kick = 1;
+        bed_run(BG_VINYL, 64, 2.0);
+        bad += check("BED: a kick left for another type is dropped, not kept for a later surf", !bg_kick);
+    }
+    /* SWELL x2, SINK: the dry bed steps back by up to 55 % and more of it goes to the reverb (the same 20 s from the same start each time) */
+    {
+        double r0, r1, r2, s0, s1;
+        bed_run(BG_BREEZE, 64, 20.0);
+        r0 = bed_rms;
+        s0 = bed_sr_sum;
+        bed_sw = 4096;
+        bed_run(BG_BREEZE, 64, 20.0);
+        r1 = bed_rms;
+        bed_sw = 0;
+        bed_dv = 4096;
+        bed_run(BG_BREEZE, 64, 20.0);
+        r2 = bed_rms;
+        s1 = bed_sr_sum;
+        bed_dv = 0;
+        printf("ui:   breeze: RMS %.0f; SWELL full %.0f (x%.2f); SINK full %.0f (x%.2f), the reverb's share %.0f -> %.0f (x%.1f)\n", r0, r1, r1 / r0, r2, r2 / r0, s0 / 20.0,
+               s1 / 20.0, s1 / s0);
+        bad += check("BED: SWELL at full doubles the bed (x1.9 .. 2.1); SINK at full takes the dry bed down to ~45 % and puts ~1.7 x more into the reverb (3.7 x the share of a quieter dry bed)",
+                     r1 > r0 * 1.9 && r1 < r0 * 2.1 && r2 > r0 * 0.4 && r2 < r0 * 0.5 && s1 > s0 * 1.5 && s1 < s0 * 2.0);
+    }
+    /* a type change: the old one fades out (~0.4 s) to silence, the new one fades in from nothing; no jump in the level */
+    {
+        static int32_t ml[CTL], mr[CTL], sr[CTL];
+        double blk[2400], pre = 0, mn = 1e9, post = 0;
+        uint32_t b, nb = 2400u, sw = 600u, k, back = 0;
+        bed_run(BG_SHOWER, 64, 3.0);
+        for (b = 0; b < nb; b++) {
+            double sq = 0;
+            if (b == sw)
+                bg_req = BG_CROWD;
+            memset(ml, 0, sizeof ml); memset(mr, 0, sizeof mr); memset(sr, 0, sizeof sr);
+            bg_block(ml, mr, sr, CTL);
+            for (k = 0; k < CTL; k++)
+                sq += (double)ml[k] * ml[k] + (double)mr[k] * mr[k];
+            blk[b] = sqrt(sq / (2.0 * CTL));
+        }
+        for (b = 200; b < sw; b++)
+            pre += blk[b] / (sw - 200u);
+        for (b = sw; b < nb; b++) {
+            mn = blk[b] < mn ? blk[b] : mn;
+            if (b > sw + 20u && blk[b] > blk[b - 1] * 1.0)
+                back++;
+        }
+        for (b = nb - 400u; b < nb; b++)
+            post += blk[b] / 400.0;
+        {
+            double worst = 0;
+            for (b = sw + 1u; b < nb; b++) {                                 /* (smoothed over 8 blocks: noise makes single blocks vary) */
+                double a = 0, c = 0;
+                for (k = 0; k < 8u && b + 8u < nb; k++) {
+                    a += blk[b + k];
+                    c += blk[b + k - 1u];
+                }
+                if (a > c * 1.6 + 8 * 40.0 && b > sw + 800u)
+                    worst = a / c;
+            }
+            printf("ui:   type change SHOWER -> CROWD: level before %.0f, quietest block %.0f, level at the end %.0f\n", pre, mn, post);
+            bad += check("BED: a type change fades the old one out to silence and the new one in (no jump after the fade), the new type playing after it",
+                         mn == 0.0 && pre > 150.0 && post > 100.0 && bg.type == BG_CROWD && worst == 0.0);
+        }
+    }
+    /* determinism: the same start gives the same samples */
+    {
+        static int32_t ml[CTL], mr[CTL], sr[CTL];
+        int64_t h1 = 0, h2 = 0;
+        uint32_t pass, b, k;
+        for (t = 1, ok = 1; t < BG_N; t++) {
+            for (pass = 0; pass < 2u; pass++) {
+                int64_t h = 0;
+                memset(&bg, 0, sizeof bg);
+                bg_req = (uint8_t)t;
+                bg_lvl = 64;
+                bg_sw = bg_dv = 0;
+                for (b = 0; b < 3000u; b++) {
+                    memset(ml, 0, sizeof ml); memset(mr, 0, sizeof mr); memset(sr, 0, sizeof sr);
+                    bg_block(ml, mr, sr, CTL);
+                    for (k = 0; k < CTL; k++)
+                        h = h * 31 + ml[k] * 7 + mr[k] + sr[k];
+                }
+                if (pass) h2 = h; else h1 = h;
+            }
+            ok &= h1 == h2 && h1 != 0;
+        }
+        bad += check("BED: deterministic: the same start renders the same samples (every type)", ok);
+    }
+    /* the world draws a bed: none in four of ten, every type, a level of 28..60, no BREEZE / SHOWER on a haze that is a WIND / RAIN */
+    {
+        uint32_t lvl_ok = 1, dup = 0, kinds = 0, keep_state;
+        memset(cnt, 0, sizeof cnt);
+        for (s = 1; s <= 2000u; s++) {
+            fresh();
+            maku_world(s * 2654435761u + 17u);
+            cnt[maku.bg]++;
+            lvl_ok &= maku.bg ? (maku.bgl >= 28u && maku.bgl <= 60u && maku.bgl % 4u == 0u) : maku.bgl == 0u;
+            if (maku.voice[MAKU_DRB] != 0xFFu && MAKU_V[MAKU_DRB].v[maku.voice[MAKU_DRB]].eng == MAKU_ENGI_NOISE) {
+                uint32_t id = MAKU_V[MAKU_DRB].v[maku.voice[MAKU_DRB]].id;
+                dup += (maku.bg == BG_BREEZE && id == 9u) || (maku.bg == BG_SHOWER && id == 10u);
+            }
+        }
+        for (t = 0; t < BG_N; t++)
+            kinds += cnt[t] > 0u;
+        printf("ui:   bed over 2000 worlds: none %u, SURF %u, SHOWER %u, BREEZE %u, CAMPFIRE %u, VINYL %u, CROWD %u\n", cnt[0], cnt[1], cnt[2], cnt[3], cnt[4], cnt[5], cnt[6]);
+        bad += check("BED: a world draws none in ~4 of 10 (35..46 %), all six types, a level of 28 .. 60, and never doubles the haze's WIND or RAIN",
+                     cnt[0] > 700u && cnt[0] < 920u && kinds == BG_N && lvl_ok && !dup);
+        /* its own stream: the main one is put back as it was (the rest of a seed's world is what it was before the bed) */
+        fresh();
+        maku_world(31337u);
+        keep_state = rng_state;
+        maku_bed_draw(31337u);
+        maku_bed_draw(99u);
+        bad += check("BED: drawing it leaves the random stream where it was", rng_state == keep_state);
+        for (s = 1, ok = 1; s <= 50u; s++) {
+            uint8_t b1, b2, l1, l2;
+            fresh();
+            maku_world(s * 977u);
+            b1 = maku.bg;
+            l1 = maku.bgl;
+            fresh();
+            maku_world(s * 977u);
+            b2 = maku.bg;
+            l2 = maku.bgl;
+            ok &= b1 == b2 && l1 == l2;
+        }
+        bad += check("BED: the same seed draws the same bed", ok);
+    }
+    /* the likes keep it: capture, apply, the blob; a like from before the bed (a 0 in its last byte) has none; a broken one is left out */
+    {
+        uint8_t blob[MAKU_FAV_BYTES];
+        maku_fav_t keep[MAKU_FAV_MAX];
+        uint32_t found = 0, same = 0, w = 0;
+        maku_fav.n = 0;
+        for (s = 1; maku_fav.n < MAKU_FAV_MAX && s < 400u; s++) {
+            maku_fav_t e;
+            fresh();
+            maku_world(s * 6151u + 5u);
+            if (!maku.bg && (s & 1u))
+                continue;                                                      /* (mostly worlds with a bed) */
+            if (maku_fav_capture(&e)) {
+                maku_fav_push(&e);
+                found += e.bg != 0u;
+            }
+        }
+        memcpy(keep, maku_fav.e, sizeof keep);
+        maku_fav_pack(blob);
+        ok = maku_fav_unpack(blob, (int)sizeof blob) == maku_fav.n;
+        for (s = 0; s < maku_fav.n; s++) {
+            ok &= maku_fav.e[s].bg == keep[s].bg && maku_fav.e[s].bgq == keep[s].bgq;
+            fresh();
+            maku_fav_apply(&maku_fav.e[s], 1);
+            same += maku.bg == keep[s].bg && (maku.bg ? maku.bgl == keep[s].bgq * 4u : maku.bgl == 0u);
+            w += maku.bg != 0u;
+        }
+        printf("ui:   likes with a bed: %u of %u; applied: %u of them the same\n", found, (unsigned)maku_fav.n, same);
+        bad += check("BED: a like keeps the bed (type and level in steps of 4) through the blob and plays it again", ok && found >= 8u && same == maku_fav.n && w == found);
+        /* captured again after an apply: the same like */
+        {
+            maku_fav_t e;
+            fresh();
+            maku_fav_apply(&keep[0], 1);
+            ok = maku_fav_capture(&e) && e.bg == keep[0].bg && e.bgq == keep[0].bgq;
+            bad += check("  captured again after it is applied, the like is the same (no drift in the level's steps)", ok);
+        }
+        /* before the bed: the byte was 0 */
+        {
+            uint8_t old[MAKU_FAV_BYTES];
+            memcpy(old, blob, sizeof old);
+            for (s = 0; s < maku_fav.n; s++)
+                old[MAKU_FAV_HEAD + s * MAKU_FAV_ESZ + 31u] = 0;
+            maku_put32(old + MAKU_FAV_BYTES - 4u, maku_fav_sum(old, MAKU_FAV_BYTES - 4u));
+            ok = maku_fav_unpack(old, (int)sizeof old) == maku_fav.n;
+            for (s = 0; s < maku_fav.n; s++)
+                ok &= maku_fav.e[s].bg == 0u && maku_fav.e[s].bgq == 0u;
+            bad += check("  a blob from before the bed (its byte 0): every like loads, with none", ok);
+            memcpy(old, blob, sizeof old);                                  /* a type this firmware does not have (7), and a level on none */
+            old[MAKU_FAV_HEAD + 31u] = 7u;
+            old[MAKU_FAV_HEAD + MAKU_FAV_ESZ + 31u] = (uint8_t)(0u | 5u << 3);
+            maku_put32(old + MAKU_FAV_BYTES - 4u, maku_fav_sum(old, MAKU_FAV_BYTES - 4u));
+            ok = maku_fav_unpack(old, (int)sizeof old) == MAKU_FAV_MAX - 2u;
+            bad += check("  a like naming a type this firmware lacks, or a level with no bed, is left out; the rest stay", ok);
+        }
+    }
+    /* DRIFT moves the bed's level within RANGE of where it began; with no bed it moves nothing */
+    {
+        uint32_t b, moved = 0, none_moved = 0;
+        int32_t a0, lo, hi;
+        for (t = 0; t < 2u; t++) {
+            fresh();
+            maku_world(1234u);
+            maku_bed_set(t ? BG_VINYL : BG_NONE, 12u);
+            maku.vp[VB_DRIFT][0] = 127;                                        /* RATE up: many steps */
+            maku.vp[VB_DRIFT][1] = 40;                                         /* RANGE 40: +-20 */
+            maku.dr_tog = 1;
+            maku_drift();
+            a0 = maku.bgl;
+            lo = hi = a0;
+            for (b = 0; b < 40000u; b++) {
+                maku_drift();
+                lo = maku.bgl < lo ? maku.bgl : lo;
+                hi = maku.bgl > hi ? maku.bgl : hi;
+            }
+            if (t)
+                moved = (uint32_t)(hi - lo);
+            else
+                none_moved = (uint32_t)(hi - lo);
+            if (t)
+                ok = lo >= a0 - 21 && hi <= a0 + 21;
+        }
+        printf("ui:   DRIFT at RANGE 40 over 40000 blocks: the bed's level (began at %d) %d .. %d; with no bed a spread of %u\n", (int)a0, (int)lo, (int)hi, none_moved);
+        bad += check("BED: DRIFT walks the level (a spread of 6 or more) inside +-RANGE/2 of where it began, and leaves a world with no bed at 0", ok && moved >= 6u && none_moved == 0u);
+    }
+    /* maku_block gives the bed what the world has and what SWELL and SINK do */
+    {
+        fresh();
+        maku_world(5u);
+        maku_bed_set(BG_CAMPFIRE, 10u);
+        maku_block();
+        ok = bg_req == BG_CAMPFIRE && bg_lvl == 40u;
+        maku.hv = VBIT(VB_SWELL);
+        maku_block();
+        ok &= bg_kick == 1u;
+        maku.hv = 0;
+        settle();
+        maku_bed_set(BG_NONE, 0);
+        maku_block();
+        bad += check("BED: maku_block hands the bed's type and level to the mix, and SWELL's press the surf's kick", ok && bg_req == BG_NONE);
+        bg_kick = 0;
+        fx_bg = 1;
+    }
+    memset(&bg, 0, sizeof bg);
+    bg_req = 0;
+    bg_lvl = 0;
+    return bad;
+}
+
 int main(void)
 {
-    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + melt() + fifths() + verbs() + verbs2() + envelope() + strong() + screen() + worlds_voices() + catalog() + drift_voices() + likes() + pitch_levels() + (getenv("MAKU_BENCH") ? bench() : 0);
+    int bad = setup() + world() + kick() + drones() + scale() + arp() + follow() + duck() + voices() + cost() + kickgrid() + macros() + knobs() + buttons() + melt() + fifths() + verbs() + verbs2() + envelope() + strong() + screen() + worlds_voices() + catalog() + drift_voices() + likes() + pitch_levels() + bed() + (getenv("MAKU_BENCH") ? bench() : 0);
     printf("%s\n", bad ? "MAKU TEST FAILED" : "maku tests passed");
     return bad != 0;
 }

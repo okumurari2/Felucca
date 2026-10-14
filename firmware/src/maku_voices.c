@@ -10,7 +10,7 @@
  * Changing a row or a weight changes what a seed means: raise MAKU_CATALOG_VERSION with it, so the emulator's rating log
  * (web/emu/felucca_web.c) does not mix ratings of different catalogs. It is the rating log's key only: the likes do not
  * look at it. */
-#define MAKU_CATALOG_VERSION 3u      /* 2: the pitch levels (maku.c PM_*) change what a seed draws; 3: the rows of the engines WHEEL, VOICE, NOISE, PHASE, TRIO and LOFI */
+#define MAKU_CATALOG_VERSION 4u      /* 2: the pitch levels (maku.c PM_*) change what a seed draws; 3: the rows of the engines WHEEL, VOICE, NOISE, PHASE, TRIO and LOFI; 4: a world draws a background bed (maku_bed_draw) */
 
 typedef struct {
     const char *name;

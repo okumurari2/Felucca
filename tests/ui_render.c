@@ -745,10 +745,11 @@ static void mock_state(int s)
         maku_setup(); song.sel = s == S_MAKU_1 ? 0 : 2; ui.hot_t = 0; ui.force = 1;
         maku.voice[1] = 0; maku.voice[2] = 0; maku.voice[3] = 0;
         break;
-    case S_MAKU_KIT:                                    /* a new world names its kit (the floor's, its longest name), the voice focused: its longest name in PRESETS */
+    case S_MAKU_KIT:                                    /* a new world names its kit (its last step, the bed's longest name), the voice focused: its longest name in PRESETS */
         maku_setup(); song.sel = 3; ui.hot_t = 0; ui.force = 1; ui.msg_t = 0;
         maku.voice[1] = 3; maku.voice[2] = 7; maku.voice[3] = 6;    /* BOWED STRING, FLUTE ORGAN, FELT MARIMBA */
-        mk_kit_world = maku.world_n; mk_kit_t = 3u * MK_KIT_F;
+        maku.bg = BG_CAMPFIRE;                                      /* (its longest name: the intro's last step) */
+        mk_kit_world = maku.world_n; mk_kit_t = 1u * MK_KIT_F;
         break;
     default: break;
     }

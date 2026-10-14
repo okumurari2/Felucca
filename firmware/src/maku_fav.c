@@ -7,7 +7,8 @@
  *   the ring   MAKU_FAV_MAX worlds, oldest first; a like more pushes the oldest out.
  *   a like     what maku_world decides, no more: the seed, the floor / haze / voice (by the catalog's stable ids,
  *              maku_voices.c), ROOT, SCALE, BPM, the 12 macros, the two INSERTs (type, RATE, DEPTH, FDBK) and the
- *              floor's and the haze's pitch levels (PM_*; a like kept before them has 0 there: WARP, it sounds as it did).
+ *              floor's and the haze's pitch levels (PM_*; a like kept before them has 0 there: WARP, it sounds as it did) and the
+ *              background bed (type and level; a like kept before it has none).
  *   a world    with N likes, one of them in MAKU_FAV_STEP * N % of the worlds (at most MAKU_FAV_CAP %), the newer the
  *              likelier (weights 1 .. N, oldest to newest); each of its parts (the three voices, ROOT, SCALE, every
  *              macro, the pitch levels) is drawn anew with MAKU_MUT_P % (from the catalog's weights and the macros' own ranges, as a new
@@ -28,7 +29,7 @@
 #define MAKU_FAV_ESZ 32u             /* bytes a like in the blob */
 #define MAKU_FAV_HEAD 8u             /* magic, version, count, entry size */
 #define MAKU_FAV_BYTES (MAKU_FAV_HEAD + MAKU_FAV_MAX * MAKU_FAV_ESZ + 4u)   /* .. and the checksum */
-#define MAKU_FAV_NEL 18u             /* the parts a like's world can change: 3 voices, ROOT, SCALE, 12 macros, the pitch levels */
+#define MAKU_FAV_NEL 19u             /* the parts a like's world can change: 3 voices, ROOT, SCALE, 12 macros, the pitch levels, the bed */
 
 typedef struct {
     uint32_t seed;                   /* the world's seed (what it was drawn from; a like's own world keeps the seed it was made with) */
@@ -37,6 +38,8 @@ typedef struct {
     uint8_t m[12];                   /* the macros, track by track (SELECT PRESETS ALGORITHM) */
     uint8_t it[2], ia[2], ib[2], ic[2];   /* the INSERT of the floor and the haze: type, RATE, DEPTH, FDBK */
     uint8_t pm;                      /* the pitch levels: the floor's | the haze's << 2 (in a byte the blob had spare: 0 before them) */
+    uint8_t bg, bgq;                 /* the background bed (bg.c BG_*) and its level in steps of 4 (0..31): one byte of the blob, 3 + 5 bits (the last spare one:
+                                      * a like kept before the bed has 0 there, no bed) */
 } maku_fav_t;
 
 static struct {
@@ -73,6 +76,8 @@ static int maku_fav_valid(const maku_fav_t *e)
     for (k = 0; k < 2u; k++)
         if (e->it[k] > (uint32_t)TP[P_ITYPE].max || e->ia[k] > 127u || e->ib[k] > 127u || e->ic[k] > 127u)
             return 0;
+    if (e->bg >= BG_N || e->bgq > MAKU_BGQ_MAX || (!e->bg && e->bgq))
+        return 0;
     return e->pm < 16u && (e->pm & 3u) < PM_N && (e->pm >> 2) < PM_N;
 }
 
@@ -104,6 +109,8 @@ static int maku_fav_capture(maku_fav_t *e)
         e->ic[k] = (uint8_t)t->p[P_IC];
     }
     e->pm = (uint8_t)(maku.pm[MAKU_DRA] | maku.pm[MAKU_DRB] << 2);
+    e->bg = maku.bg;
+    e->bgq = maku.bg ? (uint8_t)((maku.bgl + 2u) >> 2 > MAKU_BGQ_MAX ? MAKU_BGQ_MAX : (maku.bgl + 2u) >> 2) : 0u;
     return maku_fav_valid(e);
 }
 
@@ -146,6 +153,7 @@ static void maku_fav_apply(const maku_fav_t *e, uint32_t seed)
     for (i = 0; i < 4u; i++)
         for (j = 0; j < 3u; j++)
             maku_macro_set(i, j, e->m[3u * i + j]);
+    maku_bed_set(e->bg, e->bgq);
 }
 
 /* part k (0..2: the floor, the haze, the voice) of like e drawn anew by the catalog's weights, under maku_world's rules
@@ -168,7 +176,7 @@ static void maku_fav_revoice(maku_fav_t *e, uint32_t k)
 }
 
 /* each part of like e drawn anew with MAKU_MUT_P %; bit i of the result: part i changed (0..2 the voices, 3 ROOT,
- * 4 SCALE, 5..16 the macros, 17 the pitch levels: both drawn as a new world's) */
+ * 4 SCALE, 5..16 the macros, 17 the pitch levels: both drawn as a new world's, 18 the bed: a type and a level, as a new world's) */
 static uint32_t maku_fav_mutate(maku_fav_t *e)
 {
     uint32_t k, t, v, did = 0;
@@ -196,6 +204,15 @@ static uint32_t maku_fav_mutate(maku_fav_t *e)
             }
             did |= (uint32_t)(v != e->pm) << k;
             e->pm = (uint8_t)v;
+        } else if (k == 18u) {
+            uint8_t b, q;
+            for (t = 0, v = (uint32_t)e->bg << 8 | e->bgq; t < 8u && v == ((uint32_t)e->bg << 8 | e->bgq); t++) {
+                maku_bed_pick(&b, &q);
+                v = (uint32_t)b << 8 | q;
+            }
+            did |= (uint32_t)(v != ((uint32_t)e->bg << 8 | e->bgq)) << k;
+            e->bg = (uint8_t)(v >> 8);
+            e->bgq = (uint8_t)(v & 255u);
         } else {
             uint32_t m = k - 5u;
             for (t = 0, v = e->m[m]; t < 8u && v == e->m[m]; t++)
@@ -285,6 +302,7 @@ static void maku_fav_pack(uint8_t *b)
             o[28 + k] = e->ic[k];
         }
         o[30] = e->pm;
+        o[31] = (uint8_t)(e->bg | e->bgq << 3);
     }
     maku_put32(b + MAKU_FAV_BYTES - 4u, maku_fav_sum(b, MAKU_FAV_BYTES - 4u));
 }
@@ -316,6 +334,8 @@ static uint32_t maku_fav_unpack(const uint8_t *b, int n)
             e->ic[k] = o[28 + k];
         }
         e->pm = o[30];
+        e->bg = o[31] & 7u;
+        e->bgq = o[31] >> 3;
         if (maku_fav_valid(e))
             maku_fav.n++;
     }

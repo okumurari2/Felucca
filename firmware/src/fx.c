@@ -256,6 +256,7 @@ static uint32_t div_samples(uint32_t div)
 }
 
 #include "perform.c"                                 /* the FX hold layer's effects (the master) */
+#include "bg.c"                                      /* MAKU's background bed (the mix: mix_block) */
 #include "click.c"                                   /* the metronome's click (after the master: audio.c) */
 
 static uint32_t delay_samples(void)
@@ -866,6 +867,7 @@ static void mix_block(int32_t *out, uint32_t n)
         mix_part(&trk[i], n);
     if (perf)
         perf_pre(mix_l, mix_r, send_d, send_r, n);
+    bg_block(mix_l, mix_r, send_r, n);                  /* MAKU's bed: a texture under the parts, a share of it into the reverb */
     rev_level(send_r, n);
     fx_buses(send_c, send_d, send_r, wet, n);
     if (perf) {
