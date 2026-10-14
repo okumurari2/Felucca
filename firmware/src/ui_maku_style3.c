@@ -263,7 +263,7 @@ static void mkl_art(int32_t cx, int32_t cy, int32_t R, uint32_t f)
         }
 }
 
-#include "ui_maku_scene.c"                                           /* 22..24: the middle as a piece of nature */
+#include "ui_maku_scene.c"                                           /* 9: the middle as a piece of nature */
 
 /* ---- 9 CORNERS ---- */
 static void mkl_corners_scene(void)
@@ -273,51 +273,46 @@ static void mkl_corners_scene(void)
     static const float A0[3] = {1.5707963f, 4.712389f, 3.1415927f};
     char t[16], k[16], b[8];
     uint32_t j, i, f = mkl_f;
-    int sw = mk_style >= 22u;                                         /* the scenes: ink on the white page */
-    uint16_t bg = sw ? SW_BG : bg, ln = sw ? SW_LINE : ln, tx = sw ? SW_TEXT : tx, dm = sw ? SW_DIM : dm, ac = sw ? SW_ACC : ac;
     (void)R;
-    if (mk_style >= 22u)
-        mkl_scene(mk_style - 22u, f);
-    else
-        mkl_art(120, 120, 66, f);
+    mkl_scene(f);                                                     /* the middle: the sea (ui_maku_scene.c) */
     for (j = 0; j < 3u; j++) {                                        /* a quarter arc around each knob's corner */
         mkq_t *q = &mkl_q[j];
         float a0 = A0[j], a1 = a0 + 1.5707963f * (float)q->val / 127.0f;
         int32_t right = CX[j] > 0, top = CY[j] == 0, xa = right ? 233 : 6, al = right ? 2 : 0;
         const aafont_t *vf = mkl_fit(&AF_L, &AF_M, q->b, 70);
-        uint16_t cc = q->gray ? mk_mix(ac, bg, q->gray) : ac;
-        mkl_arc(CX[j], CY[j], 92, 4.0f, A0[j], A0[j] + 1.5707963f, ln, bg);
+        uint16_t cc = q->gray ? mk_mix(OB_ACC, OB_BG, q->gray) : OB_ACC;
+        mkl_arc(CX[j], CY[j], 92, 4.0f, A0[j], A0[j] + 1.5707963f, OB_LINE, OB_BG);
         if (q->val > 0)
-            mkl_arc(CX[j], CY[j], 92, 4.0f, a0, a1, cc, bg);
+            mkl_arc(CX[j], CY[j], 92, 4.0f, a0, a1, cc, OB_BG);
         if (top) {
-            mkl_text(xa, 8, &AF_M, q->name, tx, al);
+            mkl_text(xa, 8, &AF_M, q->name, OB_TEXT, al);
             mkl_text(xa, 28, vf, q->b, cc, al);
-            mkl_text(xa, 56, &AF_S, q->label, dm, al);
+            mkl_text(xa, 56, &AF_S, q->label, OB_DIM, al);
         } else {
-            mkl_text(xa, 182, &AF_S, q->label, dm, al);
+            mkl_text(xa, 182, &AF_S, q->label, OB_DIM, al);
             mkl_text(xa, 198, vf, q->b, cc, al);
-            mkl_text(xa, 224, &AF_M, q->name, tx, al);
+            mkl_text(xa, 224, &AF_M, q->name, OB_TEXT, al);
         }
         if (q->title[0])
-            mkl_text(120, 186, &AF_M, q->title, ac, 1);
+            mkl_text(120, 186, &AF_M, q->title, OB_ACC, 1);
     }
     for (i = 0; i < 4u; i++) {                                        /* MASTER's corner: the four volumes, a fan */
         int32_t r = 68 + (int32_t)i * 10, lvl = trk[i].p[P_LEVEL];
-        uint16_t c = i == f ? (ui.hot_t && ui.hot_col == i ? tx : ac) : mk_mix(ln, tx, 55);
-        mkl_arc(0, 0, r, 2.0f, 0.0f, 1.5707963f, ln, bg);
+        uint16_t c = i == f ? (ui.hot_t && ui.hot_col == i ? OB_TEXT : OB_ACC) : mk_mix(OB_LINE, OB_TEXT, 55);
+        mkl_arc(0, 0, r, 2.0f, 0.0f, 1.5707963f, OB_LINE, OB_BG);
         if (lvl > 0)
-            mkl_arc(0, 0, r, 3.0f, 1.5707963f - 1.5707963f * (float)lvl / 127.0f, 1.5707963f, c, bg);
-        cv_text(r - 3, 0, &AF_S, MAKU_NUM[i], i == f ? ac : dm);
+            mkl_arc(0, 0, r, 3.0f, 1.5707963f - 1.5707963f * (float)lvl / 127.0f, 1.5707963f, c, OB_BG);
+        cv_text(r - 3, 0, &AF_S, MAKU_NUM[i], i == f ? OB_ACC : OB_DIM);
     }
     mkl_title(t, f);
     if (ui.msg_t)
-        cv_text(6, 4, &AF_S, ui.msg, ac);
+        cv_text(6, 4, &AF_S, ui.msg, OB_ACC);
     else
-        cv_text(6, 3, &AF_M, t, ac);
+        cv_text(6, 3, &AF_M, t, OB_ACC);
     mkl_key(k);
-    cv_text(6, 22, &AF_S, k, tx);
+    cv_text(6, 22, &AF_S, k, OB_TEXT);
     fmt_int(b, song.g[G_BPM]);                                        /* (the tempo was the rings' middle) */
-    cv_text(6, 36, &AF_S, b, ui.bpm_t ? ac : dm);
+    cv_text(6, 36, &AF_S, b, ui.bpm_t ? OB_ACC : OB_DIM);
 }
 
 /* ---- 10 FLANK ---- */
@@ -798,14 +793,14 @@ static void mkl_draw(uint32_t f, uint32_t v)
         hy_derive(P);
     }
     {
-        uint8_t light = mk_style == 17u || mk_style >= 22u;
+        uint8_t light = mk_style == 17u;
         if (ux.mono || ux.light != light) {
             ux.mono = 0;
             ux.light = light;
             ux.gen++;
         }
     }
-    bg0 = mk_style >= 13u && mk_style < 22u ? hy_c.bg0 : mk_style >= 22u ? SW_BG : OB_BG;
+    bg0 = mk_style >= 13u && mk_style < 22u ? hy_c.bg0 : OB_BG;
     for (band = 0; band < 2u; band++) {                               /* the whole screen, in two strips */
         cv_begin(240, 120, bg0);
         cv_oy = -(int32_t)(band * 120u);
@@ -819,7 +814,6 @@ static void mkl_draw(uint32_t f, uint32_t v)
         case 10: mkl_flank_scene(); break;
         case 11: mkl_bloom_scene(); break;
         case 12: mkl_star_scene(); break;
-        case 22: case 23: case 24: mkl_corners_scene(); break;
         default: mkl_hybrid_scene(); break;
         }
         cv_oy = 0;
