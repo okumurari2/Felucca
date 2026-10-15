@@ -113,7 +113,7 @@ static void mkl_corners_scene(void)
         float a0 = A0[j], a1 = a0 + 1.5707963f * (float)q->val / 127.0f;
         int32_t right = CX[j] > 0, top = CY[j] == 0, xa = right ? 233 : 6, al = right ? 2 : 0;
         const aafont_t *vf = mkl_fit(&AF_L, &AF_M, q->b, 70);
-        uint16_t cc = q->gray ? mk_mix(OB_ACC, OB_BG, q->gray) : OB_ACC;
+        uint16_t tc = mk_col(f), cc = q->gray ? mk_mix(tc, OB_BG, q->gray) : tc;      /* the focused track's colour, as in the shipped screen */
         mkl_arc(CX[j], CY[j], 92, 4.0f, A0[j], A0[j] + 1.5707963f, OB_LINE, OB_BG);
         if (q->val > 0)
             mkl_arc(CX[j], CY[j], 92, 4.0f, a0, a1, cc, OB_BG);
@@ -127,15 +127,15 @@ static void mkl_corners_scene(void)
             mkl_text(xa, 224, &AF_M, q->name, OB_TEXT, al);
         }
         if (q->title[0])
-            mkl_text(120, 186, &AF_M, q->title, OB_ACC, 1);
+            mkl_text(120, 186, &AF_M, q->title, tc, 1);
     }
-    for (i = 0; i < 4u; i++) {                                        /* MASTER's corner: the four volumes, a fan */
+    for (i = 0; i < 4u; i++) {                                        /* MASTER's corner: the four volumes, a fan, each its track's colour */
         int32_t r = 68 + (int32_t)i * 10, lvl = trk[i].p[P_LEVEL];
-        uint16_t c = i == f ? (ui.hot_t && ui.hot_col == i ? OB_TEXT : OB_ACC) : mk_mix(OB_LINE, OB_TEXT, 55);
+        uint16_t c = i == f ? (ui.hot_t && ui.hot_col == i ? OB_TEXT : mk_col(i)) : mk_mix(mk_col(i), OB_BG, 45);
         mkl_arc(0, 0, r, 2.0f, 0.0f, 1.5707963f, OB_LINE, OB_BG);
         if (lvl > 0)
             mkl_arc(0, 0, r, 3.0f, 1.5707963f - 1.5707963f * (float)lvl / 127.0f, 1.5707963f, c, OB_BG);
-        cv_text(r - 3, 0, &AF_S, MAKU_NUM[i], i == f ? OB_ACC : OB_DIM);
+        cv_text(r - 3, 0, &AF_S, MAKU_NUM[i], i == f ? mk_col(i) : OB_DIM);
     }
     mkl_title(t, f);
     if (ui.msg_t)
