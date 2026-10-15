@@ -9,7 +9,8 @@
  * spring, D#..F summer, F#..G# autumn, A..B winter; a minor scale adds dusk), the verbs are events (SINK fades it all, LIFT
  * glows, SWELL heaves, WOBBLE curls, CASCADE sends a flock, SCRAMBLE gusts), DRIFT sends a cloud. No scenery and no window
  * edge: only the things, painted with alpha against what is already there (the canvas is read back), fading out towards the
- * rim (SC_R). Drawn on the whole screen in two bands, state stepped once a frame. */
+ * rim (SC_R). Each part's TONE is the clarity of its edges (low: wide and faint, high: thin and bright); the breath's zone dims
+ * it towards night and lets the tide rise and fall (the swell higher, the shore moving). Drawn on the whole screen in two bands, state stepped once a frame. */
 
 #define SC_X0 36
 #define SC_X1 204
@@ -17,6 +18,7 @@
 
 static int32_t sc_ylo, sc_yhi;              /* the rows of the band being drawn (screen y), clipped to the window */
 static int32_t sc_gain = 256;               /* 256 = whole; SINK fades everything towards the page */
+static float sc_soft;                       /* 0 crisp .. 1 soft: a part's TONE is the clarity of its edges (soft: wide and faint) */
 
 /* the sea's inks on the dark page, by season (deep: the lines of swell, light: foam and birds, sand: the shore) */
 typedef struct { uint16_t deep, light, sand; } scp_t;
@@ -97,8 +99,9 @@ static void sc_rows(int32_t x0, int32_t x1, int32_t y0, int32_t y1, uint16_t c, 
 /* a vertical span [yc - w/2, yc + w/2] at x, anti-aliased */
 static void sc_vspan(int32_t x, float yc, float w, uint16_t c, float a)
 {
-    float top = yc - w * 0.5f, bot = yc + w * 0.5f;
+    float w2 = w * (1.0f + 1.2f * sc_soft) + 1.6f * sc_soft, top = yc - w2 * 0.5f, bot = yc + w2 * 0.5f;
     int32_t j, j0 = (int32_t)floorf(top), j1 = (int32_t)floorf(bot);
+    a *= 1.0f - 0.4f * sc_soft;
     for (j = j0; j <= j1; j++) {
         float cov = fminf(bot, (float)(j + 1)) - fmaxf(top, (float)j);
         if (j < sc_ylo || j >= sc_yhi)
@@ -151,40 +154,6 @@ static void sc_ellfill(float cx, float cy, float rx, float ry, uint16_t c, float
         }
     }
 }
-static void sc_ring(float cx, float cy, float rx, float ry, float w, uint16_t c, float a)
-{
-    int32_t x, y, x0 = (int32_t)(cx - rx - w - 1), x1 = (int32_t)(cx + rx + w + 1), y0 = (int32_t)(cy - ry - w - 1), y1 = (int32_t)(cy + ry + w + 1);
-    float s = sqrtf(rx * ry);
-    if (rx < 0.5f || ry < 0.5f || a <= 0.0f)
-        return;
-    for (y = y0 < sc_ylo ? sc_ylo : y0; y <= y1 && y < sc_yhi; y++)
-        for (x = x0; x <= x1; x++) {
-            float dx = ((float)x + 0.5f - cx) / rx, dy = ((float)y + 0.5f - cy) / ry, d = (sqrtf(dx * dx + dy * dy) - 1.0f) * s, e = w * 0.5f + 0.5f - fabsf(d);
-            if (e > 0.0f)
-                sc_px(x, y, c, (int32_t)(a * fminf(e, 1.0f)));
-        }
-}
-static void sc_leaf(float cx, float cy, float ang, float size, uint16_t c, float a)
-{
-    float ca = cosf(ang), sa = sinf(ang), ext = size + 2.0f;
-    uint16_t vein = sc_dim(c, 0.6f);
-    int32_t x, y;
-    for (y = (int32_t)(cy - ext); y <= (int32_t)(cy + ext); y++) {
-        if (y < sc_ylo || y >= sc_yhi)
-            continue;
-        for (x = (int32_t)(cx - ext); x <= (int32_t)(cx + ext); x++) {
-            float dx = (float)x + 0.5f - cx, dy = (float)y + 0.5f - cy, u = (dx * ca + dy * sa) / size, v = -dx * sa + dy * ca, hw, e;
-            if (u <= -1.0f || u >= 1.0f)
-                continue;
-            hw = size * 0.44f * sqrtf(1.0f - u * u) * (1.0f + 0.25f * u);
-            e = fminf(hw - fabsf(v) + 0.5f, 1.0f);
-            if (e <= 0.0f)
-                continue;
-            sc_px(x, y, fabsf(v) < 0.55f && fabsf(u) < 0.85f ? vein : c, (int32_t)(a * e));
-        }
-    }
-}
-static void sc_flake(float cx, float cy, float size, uint16_t c, float a) { sc_ellfill(cx, cy, size * 0.5f, size * 0.5f, c, a); }
 /* a tapering stroke of the wind: from (x, y) `len` right, bent by `bend`; `gap` the chance a piece is missing (by hash) */
 static void sc_stroke(float x, float y, float len, float bend, float w, uint16_t c, float a, float gap, uint32_t seed)
 {
@@ -200,20 +169,20 @@ static void sc_stroke(float x, float y, float len, float bend, float w, uint16_t
 /* ---- the state: stepped once a frame ---- */
 typedef struct {
     float lev[4], m[4][3], clk, tf, duck, wind, foc[4];
-    float sink, casc, lift, swell, wob, scr, drift;
+    float sink, casc, lift, swell, wob, scr, drift, bw, bb;
     int season, minor;
     uint32_t f;
 } sct_t;
 static sct_t sc;
 
-typedef struct { uint32_t t0; uint8_t a, on; int16_t x, y; } sce_t;       /* PULSE's events: a drop / an acorn / a wave */
-typedef struct { uint8_t on, rest, col; float x, y, ang, ph, spin, yd, age, life, h, vx; } scl_t;   /* VOICE's: a leaf / a bird */
+typedef struct { uint8_t on, a; uint32_t t0; } sce_t;                  /* PULSE's events: a wave up the shore (a: how strong) */
+typedef struct { uint8_t on; float x, y, ph, age; } scl_t;             /* VOICE's: a bird */
 static sce_t sc_ev[8];
 static scl_t sc_lf[14];
-static uint32_t sc_ms, sc_kstep = 0xFFFFu, sc_astep = 0xFFFFu, sc_last;
+static uint32_t sc_ms, sc_kstep = 0xFFFFu, sc_astep = 0xFFFFu;
 static float sc_clock;
 
-static void sc_spawn_leaf(int kind, float pitch01, float h01)
+static void sc_spawn_bird(float h01)                                   /* in from the left, at its height (the pitch) */
 {
     int32_t i, o = 0;
     scl_t *l;
@@ -227,27 +196,13 @@ static void sc_spawn_leaf(int kind, float pitch01, float h01)
     }
     l = &sc_lf[o];
     l->on = 1;
-    l->rest = 0;
-    l->col = (uint8_t)(sc_rnd() % 3u);
     l->age = 0.0f;
     l->ph = sc_rf() * 6.2831853f;
-    l->spin = (sc_rf() - 0.5f) * 2.0f;
-    l->ang = sc_rf() * 6.2831853f;
-    l->h = h01;
-    l->vx = 0.0f;
-    if (kind == 2) {                                                  /* a bird: in from the left at its height */
-        l->x = (float)SC_X0 - 6.0f;
-        l->y = 46.0f + (1.0f - h01) * 44.0f;
-        l->life = 30.0f;
-    } else {                                                          /* a leaf: from the branch / the canopy, its place the pitch */
-        l->x = 52.0f + pitch01 * 112.0f;
-        l->y = kind == 1 ? 56.0f : 40.0f;                  /* (1: the water's branch, 0: the canopy) */
-        l->yd = 0.0f;
-        l->life = 0.0f;
-    }
+    l->x = (float)SC_X0 - 6.0f;
+    l->y = 46.0f + (1.0f - h01) * 44.0f;
 }
 
-static void sc_step(uint32_t f, uint32_t kind)
+static void sc_step(uint32_t f)
 {
     uint32_t i, idx, len;
     float dt, tf;
@@ -277,7 +232,9 @@ static void sc_step(uint32_t f, uint32_t kind)
     sc.wob = (float)maku.va[VB_WOB] * (1.0f / 4096.0f);
     sc.scr = (float)maku.va[VB_SCRAM] * (1.0f / 4096.0f);
     sc.drift = maku.dr_tog ? 1.0f : 0.0f;
-    sc.wind = sc.lev[2] * (0.5f + 0.5f * sc.m[2][2]) * (1.0f + 0.6f * sc.scr);
+    sc.bw = sc_cl((float)maku.bw * (1.0f / 32768.0f), 0.0f, 1.0f);      /* the breath's zone (0: not in it .. 1: whole) and its tide (0 out .. 1 in) */
+    sc.bb = sc_cl((float)maku.bb * (1.0f / 32768.0f), 0.0f, 1.0f);
+    sc.wind = sc.lev[2] * (0.5f + 0.5f * sc.m[2][2]) * (1.0f + 0.6f * sc.scr) * (1.0f - 0.5f * sc.bw);
     sc.season = (trk[MAKU_DRA].p[P_ROOT] % 12) / 3;
     {
         int32_t s = trk[MAKU_DRA].p[P_SCALE];
@@ -302,8 +259,6 @@ static void sc_step(uint32_t f, uint32_t kind)
             sc_ev[o].on = 1;
             sc_ev[o].t0 = sc_ms ? sc_ms : 1u;
             sc_ev[o].a = hit ? 255u : 100u;
-            sc_ev[o].x = (int16_t)(70 + (int32_t)(sc_rf() * 100.0f));
-            sc_ev[o].y = (int16_t)(kind == 0u ? 132 + (int32_t)(sc_rf() * 56.0f) : kind == 1u ? 160 + (int32_t)(sc_rf() * 36.0f) : 140);
         }
     }
     len = trk[MAKU_ARP].p[P_SLEN] > 0 ? (uint32_t)trk[MAKU_ARP].p[P_SLEN] : 1u;      /* VOICE: a note of the arp */
@@ -313,63 +268,20 @@ static void sc_step(uint32_t f, uint32_t kind)
     else if (idx != sc_astep) {
         const step_t *st = &maku_cur[MAKU_ARP];
         sc_astep = idx;
-        if (st->n > 0u) {
-            int32_t pc = ((int32_t)st->note[0] % 12 - trk[MAKU_DRA].p[P_ROOT] % 12 + 12) % 12;
-            sc_spawn_leaf((int)kind == 2 ? 2 : (int)kind == 0 ? 1 : 0, (float)pc / 11.0f, sc_cl(((float)st->note[0] - 36.0f) / 48.0f, 0.0f, 1.0f));
-        }
+        if (st->n > 0u)
+            sc_spawn_bird(sc_cl(((float)st->note[0] - 36.0f) / 48.0f, 0.0f, 1.0f));
     }
-    if (sc.casc > 0.05f && sc_rf() < sc.casc * dt * 9.0f)             /* CASCADE: a shower from the branch */
-        sc_spawn_leaf((int)kind == 2 ? 2 : (int)kind == 0 ? 1 : 0, sc_rf(), sc_rf());
-    {
-        float flow = (3.0f + 11.0f * sc.lev[1]) * tf, wob = 1.0f + 2.0f * sc.wob, lo = sc.m[3][0];
-        for (i = 0; i < 14u; i++) {
-            scl_t *l = &sc_lf[i];
-            if (!l->on)
-                continue;
-            l->age += dt;
-            if (kind == 2u) {                                         /* a bird: on across, the pitch its height, a swing by LOOSE */
-                l->x += (20.0f + 12.0f * sc.wind) * tf * dt;
-                l->y += sinf(l->age * 2.0f + l->ph) * (3.0f + 10.0f * lo) * wob * dt;
-                if (l->x > (float)SC_X1 + 10.0f)
-                    l->on = 0;
-                continue;
-            }
-            if (!l->rest) {                                           /* falling: the wind pushes, LOOSE sways it, WOBBLE curls it */
-                float amp = (4.0f + 22.0f * lo) * wob, freq = 1.4f + 1.2f * lo;
-                if (l->yd == 0.0f)
-                    l->yd = kind == 0u ? 132.0f + sc_rf() * 56.0f : 160.0f + sc_rf() * 38.0f;
-                l->y += (15.0f + 6.0f * (1.0f - lo)) * tf * dt;
-                l->x += (sc.wind * 30.0f + cosf(l->age * freq + l->ph) * amp * freq * 0.35f) * dt;
-                l->ang += (cosf(l->age * freq + l->ph) * (0.6f + 2.0f * lo) + l->spin * sc.scr * 6.0f) * dt;
-                if (l->y >= l->yd) {
-                    l->rest = 1;
-                    l->age = 0.0f;
-                    l->life = 1.5f + 9.0f * sc.m[3][2];               /* TRAIL: how long it stays */
-                    if (kind == 0u) {                                 /* it lands: a small ripple on the water */
-                        uint32_t o = 0, k;
-                        for (k = 0; k < 8u; k++)
-                            if (!sc_ev[k].on || sc_ev[k].t0 < sc_ev[o].t0) {
-                                o = k;
-                                if (!sc_ev[k].on)
-                                    break;
-                            }
-                        sc_ev[o].on = 1;
-                        sc_ev[o].t0 = sc_ms;
-                        sc_ev[o].a = 120u;
-                        sc_ev[o].x = (int16_t)l->x;
-                        sc_ev[o].y = (int16_t)l->yd;
-                    }
-                }
-            } else {                                                  /* at rest: the stream carries it (water), the ground keeps it (forest) */
-                if (kind == 0u)
-                    l->x += flow * dt * (0.6f + 0.4f * (l->yd - 120.0f) / 70.0f);
-                l->ang += (l->spin * 0.1f) * dt;
-                if (l->age > l->life)
-                    l->on = 0;
-            }
-            if (l->x > (float)SC_X1 + 12.0f || l->x < (float)SC_X0 - 12.0f)
-                l->on = 0;
-        }
+    if (sc.casc > 0.05f && sc_rf() < sc.casc * dt * 9.0f)             /* CASCADE: a flock */
+        sc_spawn_bird(sc_rf());
+    for (i = 0; i < 14u; i++) {                                       /* a bird: on across, a swing by LOOSE, the wind speeds it */
+        scl_t *l = &sc_lf[i];
+        if (!l->on)
+            continue;
+        l->age += dt;
+        l->x += (20.0f + 12.0f * sc.wind) * tf * dt;
+        l->y += sinf(l->age * 2.0f + l->ph) * (3.0f + 10.0f * sc.m[3][0]) * (1.0f + 2.0f * sc.wob) * dt;
+        if (l->x > (float)SC_X1 + 10.0f)
+            l->on = 0;
     }
     for (i = 0; i < 8u; i++)
         if (sc_ev[i].on && sc_ms - sc_ev[i].t0 > 3200u)
@@ -399,14 +311,15 @@ static void sc_sea(void)
 {
     const scp_t *P = sc_pal();
     int32_t hz = 100, sh = 164, i, k;
-    float t = sc.clk, dk = 1.0f - 0.55f * sc.duck, sw = 1.0f + 1.4f * sc.swell;
+    float t = sc.clk, dk = 1.0f - 0.55f * sc.duck, sw = (1.0f + 1.4f * sc.swell) * (1.0f + 0.9f * sc.bw * sc.bb), tide = 7.0f * sc.bw * (sc.bb - 0.5f);   /* the breath: the tide rises and falls (swell higher, the shore moves) */
     uint16_t ink = sc_dusk(P->deep, sc.minor), pale = sc_dusk(P->light, sc.minor), sand = sc_dusk(P->sand, sc.minor), wc = sc_mixf(ink, pale, 0.1f + 0.35f * sc.m[1][1]);
     if (sc.drift > 0.5f)
         sc_cloud(66.0f, 60.0f, pale);
     {
         int32_t nb = 3 + (int32_t)(sc.m[1][0] * 5.0f);
+        sc_soft = 1.0f - sc.m[1][1];                                  /* every part's TONE: the clarity of its edges */
         for (i = 0; i < nb; i++) {                                    /* the swell (FLOOR) */
-            float tt = (float)(i + 1) / (float)(nb + 1), y = (float)hz + (float)(sh - hz) * powf(tt, 1.4f);
+            float tt = (float)(i + 1) / (float)(nb + 1), y = (float)hz + (float)(sh - hz) * powf(tt, 1.4f) - tide * tt;
             sc_wave(y, (0.8f + 6.0f * sc.m[1][2]) * (0.4f + tt) * sw, 0.05f, -t * (0.6f + 1.0f * tt) + (float)i * 1.3f, wc, (90.0f + 150.0f * sc.lev[1]) * dk * sc.foc[1], 0.9f + 1.6f * tt, SC_X0, SC_X1);
         }
         for (i = 0; i < (int32_t)(sc.lev[1] * (3.0f + 30.0f * sc.m[1][1] * sc.m[1][1])); i++) {
@@ -415,6 +328,7 @@ static void sc_sea(void)
                 sc_line(x, y, x + 6.0f, y, 1.0f, pale, (60.0f + 120.0f * sc.m[1][1]) * tw * dk);
         }
     }
+    sc_soft = 1.0f - sc.m[0][1];
     for (i = 0; i < 8; i++) {                                         /* the waves (PULSE): up the shore and back; WASH how many lines follow; a line of sand where it reached */
         const sce_t *e = &sc_ev[i];
         float age, p;
@@ -428,11 +342,12 @@ static void sc_sea(void)
             float pp = p - (float)k * 0.1f * (1.0f + sc.m[0][2]), y;
             if (pp <= 0.0f || pp >= 1.0f)
                 continue;
-            y = (float)sh - 20.0f + 36.0f * (pp < 0.45f ? 1.0f - (1.0f - pp / 0.45f) * (1.0f - pp / 0.45f) : 1.0f - 0.45f * (pp - 0.45f) / 0.55f) + (float)k * 2.0f;
+            y = (float)sh - 20.0f + tide + 36.0f * (pp < 0.45f ? 1.0f - (1.0f - pp / 0.45f) * (1.0f - pp / 0.45f) : 1.0f - 0.45f * (pp - 0.45f) / 0.55f) + (float)k * 2.0f;
             sc_wave(y + 5.0f, (1.5f + 2.5f * sc.lev[0]) * 1.0f, 0.07f, (float)i * 2.0f + (float)k, sand, 110.0f * (1.0f - pp) * sc.lev[0], 1.4f, 56, 184);
-            sc_wave(y, (1.5f + 2.5f * sc.lev[0]) * 1.0f, 0.07f, (float)i * 2.0f + (float)k, pale, (float)e->a * (0.45f + 0.55f * sc.lev[0]) * (1.0f - pp * 0.7f) / (1.0f + (float)k) * sc.foc[0], (2.0f + 1.5f * sc.lev[0]) * (1.0f - (float)k * 0.25f), 56, 184);
+            sc_wave(y, (1.5f + 2.5f * sc.lev[0]) * 1.0f, 0.07f, (float)i * 2.0f + (float)k, pale, (float)e->a * (0.6f + 0.55f * sc.lev[0]) * (1.0f - pp * 0.6f) / (1.0f + 0.7f * (float)k) * sc.foc[0], (2.4f + 2.0f * sc.lev[0]) * (1.0f - (float)k * 0.25f), 56, 184);
         }
     }
+    sc_soft = 1.0f - sc.m[2][1];
     {                                                                 /* the wind (HAZE): cloud streaks, and sand along the shore */
         int32_t nw = (int32_t)(sc.wind * (2.0f + 4.0f * (0.3f + sc.m[2][0])) + 0.5f);
         for (i = 0; i < nw && i < 7; i++) {
@@ -448,24 +363,26 @@ static void sc_sea(void)
             sc_stroke(x, y, len, (sc_hf((uint32_t)i, 43u) - 0.5f) * 3.0f, 1.2f + 1.2f * sc.wind, sand, 230.0f * sc.wind * dk * sc.foc[2], 0.55f * sc.m[2][0] + 0.2f * sc.scr, (uint32_t)i + 77u);
         }
     }
+    sc_soft = 1.0f - sc.m[3][1];
     for (i = 0; i < 14; i++) {                                        /* the birds (VOICE): one a note; the pitch its height; the wind lifts them; a streak behind */
         const scl_t *l = &sc_lf[i];
-        float flap, sz = 5.5f + 6.0f * sc.lev[3], a = 255.0f * sc.foc[3] * (sc.lev[3] > 0.02f ? 1.0f : 0.0f);
+        float flap, sz = 8.0f + 7.0f * sc.lev[3], a = 255.0f * sc.foc[3] * (sc.lev[3] > 0.02f ? 1.0f : 0.0f);
         uint16_t c = sc.season == 2 ? RGB(255, 244, 230) : RGB(250, 250, 252);
         if (!l->on)
             continue;
         flap = sinf(l->age * 6.0f + l->ph) * sz * 0.55f * (1.0f + 0.5f * sc.wob);
         sc_line(l->x - 6.0f - 46.0f * sc.m[3][2], l->y + 2.0f, l->x - sz, l->y, 1.0f, pale, 70.0f * sc.lev[3] * sc.foc[3]);
-        sc_line(l->x - sz * 1.3f, l->y - sz * 0.2f + flap, l->x, l->y + sz * 0.15f, 2.0f, c, a);
-        sc_line(l->x, l->y + sz * 0.15f, l->x + sz * 1.3f, l->y - sz * 0.2f + flap, 2.0f, c, a);
+        sc_line(l->x - sz * 1.3f, l->y - sz * 0.2f + flap, l->x, l->y + sz * 0.15f, 2.4f, c, a);
+        sc_line(l->x, l->y + sz * 0.15f, l->x + sz * 1.3f, l->y - sz * 0.2f + flap, 2.4f, c, a);
     }
+    sc_soft = 0.0f;
     sc_verbs(P);
 }
 
 static void mkl_scene(uint32_t f)
 {
-    sc_step(f, 2u);
-    sc_gain = (int32_t)(256.0f * (1.0f - 0.8f * sc_cl(sc.sink, 0.0f, 1.0f)));
+    sc_step(f);
+    sc_gain = (int32_t)(256.0f * (1.0f - 0.8f * sc_cl(sc.sink, 0.0f, 1.0f)) * (1.0f - 0.35f * sc.bw));     /* the breath's zone is night */
     sc_ylo = -cv_oy < SC_X0 ? SC_X0 : -cv_oy;
     sc_yhi = -cv_oy + (int32_t)cv_h > SC_X1 ? SC_X1 : -cv_oy + (int32_t)cv_h;
     sc_sea();
