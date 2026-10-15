@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Headless screenshots of MAKU's screen in every preview look (firmware/src/ui_maku_style.c), then one comparison sheet.
 //   node tools/mk_shots.mjs [OUT.png [STYLES [SEEDS]]]   (default docs/shots/mk_styles.png, styles 0,1,2,3,4 (0: the shipped look), seeds 7,99;
-//                                           one style only: a strip of its worlds;
+//                                           one style only: a strip of its worlds, and its SINK / SELECT / volume below;
 //                                           needs build/emu: web/emu/build.sh;
 //                                           Playwright with a Chromium, e.g. PLAYWRIGHT_BROWSERS_PATH)
 // Rows: two worlds (#seed=), a verb held (SINK: key "1"), SELECT turned (the arrow keys), KNOB 3 turned (the wheel); columns: the styles given (#style=N).
