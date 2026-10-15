@@ -11,8 +11,9 @@
  * edge: only the things, painted with alpha against what is already there (the canvas is read back), fading out towards the
  * rim (SC_R). Each part's TONE is the clarity of its edges (low: wide and faint, high: thin and bright); the breath's zone dims
  * it towards night and lets the tide rise and fall (the swell higher, the shore moving). Drawn on the whole screen in two bands, state stepped once a frame.
- * COLOUR: every thing keeps its own colour (white foam, blue sea, pale haze, white birds) with a tint (8 %) of its part's track
- * colour (mk_col: PULSE coral, FLOOR amber, HAZE green, VOICE blue); the season tints it too (10 %), the minor adds dusk. TOUCH: turning a macro of the focused part lights that part's things for a moment (tch). */
+ * COLOUR: the track colours of this look are the colours of the things (sc_trk: PULSE foam aqua, FLOOR sea blue, HAZE sand, VOICE bird
+ * white), so a part's things, its fan arc, its number and the macro's value on the corners are one colour; the season tints
+ * them (6 %), the minor adds dusk. TOUCH: turning a macro of the focused part lights that part's things for a moment (tch). */
 
 #define SC_X0 36
 #define SC_X1 204
@@ -297,11 +298,12 @@ static void sc_step(uint32_t f)
 
 /* ---- the sea: things only ---- */
 /* the track colour of a part, tinted by the season, dusk for a minor scale; `hi` the same lifted towards white (foam, glints, birds) */
-static uint16_t sc_tcol(uint32_t i)
+static uint16_t sc_trk(uint32_t i)                                    /* the track's colour in this look = its thing's colour: foam, sea, sand and haze, birds */
 {
-    static const uint16_t N[4] = {RGB(236, 246, 252), RGB(40, 124, 238), RGB(206, 218, 232), RGB(252, 252, 254)};   /* foam, sea, haze, birds: their own colours */
-    return sc_dusk(mk_mix(mk_mix(N[i & 3u], SC_TINT[sc.season & 3], 6), mk_col(i), 8), sc.minor);                  /* a tint of the track colour (8 %) */
+    static const uint16_t C[4] = {RGB(120, 222, 226), RGB(52, 132, 242), RGB(236, 186, 108), RGB(244, 244, 252)};
+    return C[i & 3u];
 }
+static uint16_t sc_tcol(uint32_t i) { return sc_dusk(mk_mix(sc_trk(i), SC_TINT[sc.season & 3], 6), sc.minor); }
 static uint16_t sc_hi(uint16_t c, int32_t pct) { return mk_mix(c, RGB(255, 255, 255), pct); }
 
 static void sc_verbs(void)                                            /* LIFT: a warm glow behind the things; (SINK is sc_gain, set in mkl_scene) */
