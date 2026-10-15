@@ -1,0 +1,280 @@
+#!/usr/bin/env python3
+"""複数AIエージェントの並行開発用の小さな道具（.agents/PROTOCOL.md 参照）。Python 3.8+、依存なし。
+
+  agent status                         全員の状態・タスク・確保中ファイル・最近のコミット
+  agent new "やること" [--files a,b] [--to NAME]   タスクを作る（--to なしなら自分が即着手、--to any で誰でも取れる）
+  agent claim ID [--files a,b] [--force]          open のタスクを取って doing にする
+  agent release ID                     確保を解いて open に戻す
+  agent block ID "理由"                ユーザー判断待ちにする
+  agent done ID                        完了にする
+  agent note ID "メモ"                 タスクの作業メモに1行追記
+  agent state                          自分の state ファイルの場所を表示（無ければ作る）
+
+自分の名前は環境変数 AGENT_NAME か --as NAME で渡す。
+"""
+import argparse
+import datetime as dt
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent.parent  # .agents/
+ROOT = HERE.parent
+TASKS = HERE / "tasks"
+STATE = HERE / "state"
+TEMPLATES = HERE / "templates"
+STATUSES = ("open", "doing", "review", "blocked", "done")
+STALE_HOURS = 24
+
+
+def now():
+    return dt.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+def die(msg):
+    print("agent: " + msg, file=sys.stderr)
+    sys.exit(1)
+
+
+# ---- タスクファイル（先頭の --- で囲んだ key: value と本文） ----
+class Task:
+    def __init__(self, path):
+        self.path = path
+        text = path.read_text(encoding="utf-8")
+        m = re.match(r"---\n(.*?)\n---\n?(.*)", text, re.S)
+        if not m:
+            die(f"{path.name}: 先頭の --- ブロックがない")
+        self.meta = {}
+        for line in m.group(1).splitlines():
+            if ":" in line:
+                k, v = line.split(":", 1)
+                self.meta[k.strip()] = v.strip()
+        self.body = m.group(2)
+
+    id = property(lambda s: s.meta.get("id", ""))
+    status = property(lambda s: s.meta.get("status", "open"))
+    owner = property(lambda s: s.meta.get("owner", ""))
+
+    @property
+    def files(self):
+        return [f.strip() for f in self.meta.get("files", "").split(",") if f.strip()]
+
+    def save(self):
+        self.meta["updated"] = now()
+        head = "\n".join(f"{k}: {v}" for k, v in self.meta.items())
+        self.path.write_text(f"---\n{head}\n---\n{self.body}", encoding="utf-8")
+
+    def note(self, who, msg):
+        line = f"- {now()} [{who}] {msg}\n"
+        if "## 作業メモ" not in self.body:
+            self.body = self.body.rstrip("\n") + "\n\n## 作業メモ\n"
+        self.body = self.body.rstrip("\n") + "\n" + line
+
+
+def load_tasks():
+    return sorted((Task(p) for p in TASKS.glob("[0-9]*.md")), key=lambda t: t.id)
+
+
+def find(tid):
+    tid = tid.zfill(4)
+    for t in load_tasks():
+        if t.id == tid:
+            return t
+    die(f"タスク {tid} が見つからない")
+
+
+def overlaps(a, b):
+    """'app.html' は 'app.html#css' と重なる。'app.html#css' と 'app.html#js' は重ならない。"""
+    if a == b:
+        return True
+    fa, fb = a.split("#")[0], b.split("#")[0]
+    return fa == fb and ("#" not in a or "#" not in b)
+
+
+def conflicts(files, me, skip_id=None):
+    hits = []
+    for t in load_tasks():
+        if t.status != "doing" or t.owner == me or t.id == skip_id:
+            continue
+        for f in files:
+            for g in t.files:
+                if overlaps(f, g):
+                    hits.append(f"{f} ↔ {t.id}「{t.meta.get('title','')}」({t.owner} が {g} を確保中)")
+    return hits
+
+
+def split_files(s):
+    return [f.strip() for f in (s or "").split(",") if f.strip()]
+
+
+def git(*args):
+    try:
+        return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True).stdout
+    except OSError:
+        return ""
+
+
+# ---- コマンド ----
+def cmd_status(a):
+    print("== 各エージェントの状態 (.agents/state/) ==")
+    for p in sorted(STATE.glob("*.md")):
+        text = p.read_text(encoding="utf-8")
+        m = re.search(r"^更新:\s*(.+)$", text, re.M)
+        upd = m.group(1).strip() if m else "?"
+        stale = ""
+        try:
+            age = dt.datetime.now().astimezone() - dt.datetime.strptime(upd, "%Y-%m-%d %H:%M").astimezone()
+            if age.total_seconds() > STALE_HOURS * 3600:
+                stale = "  ※古い"
+        except ValueError:
+            pass
+        m = re.search(r"^## 今やっていること\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+        now_doing = " ".join((m.group(1) if m else "").split())[:120] or "（記載なし）"
+        print(f"- {p.stem:8} 更新 {upd}{stale}\n    {now_doing}")
+
+    tasks = load_tasks()
+    print("\n== タスク (.agents/tasks/) ==")
+    for st in ("doing", "blocked", "review", "open"):
+        for t in (x for x in tasks if x.status == st):
+            files = ", ".join(t.files) or "-"
+            who = t.owner or "未割当"
+            print(f"- {t.id} [{st:7}] {who:8} {t.meta.get('title','')}  〔{files}〕")
+    done = sum(1 for t in tasks if t.status == "done")
+    if done:
+        print(f"  （done {done}件は省略）")
+
+    held = [(f, t) for t in tasks if t.status == "doing" for f in t.files]
+    clash = [(f, t, g, u) for i, (f, t) in enumerate(held) for g, u in held[i + 1:]
+             if t.owner != u.owner and overlaps(f, g)]
+    if clash:
+        print("\n!! 確保の重なり（どちらかが譲ること）")
+        for f, t, g, u in clash:
+            print(f"   {t.id}/{t.owner}:{f}  ↔  {u.id}/{u.owner}:{g}")
+
+    log = git("log", "--format=%h %ad %s", "--date=format:%m-%d %H:%M", "-8")
+    if log:
+        print("\n== 最近のコミット ==\n" + log.rstrip())
+    st = git("status", "-sb").splitlines()
+    if st and ("behind" in st[0] or "ahead" in st[0]):
+        print("\n!! " + st[0] + "  （git pull --rebase / push を忘れずに）")
+
+
+def next_id():
+    ids = [int(t.id) for t in load_tasks() if t.id.isdigit()]
+    return str(max(ids, default=0) + 1).zfill(4)
+
+
+def cmd_new(a):
+    me = a.me
+    files = split_files(a.files)
+    owner = "" if a.to == "any" else (a.to or me)
+    if not a.to:
+        hits = conflicts(files, me)
+        if hits:
+            die("確保が重なるので作れない:\n  " + "\n  ".join(hits))
+    tid = next_id()
+    slug = re.sub(r"[^a-z0-9]+", "-", (a.slug or "").lower()).strip("-")[:40]
+    body = (TEMPLATES / "task.md").read_text(encoding="utf-8")
+    body = body.split("---\n", 2)[2] if body.startswith("---\n") else body
+    path = TASKS / (f"{tid}-{slug}.md" if slug else f"{tid}.md")
+    meta = {"id": tid, "title": a.title, "status": "open" if a.to else "doing",
+            "owner": owner, "files": ", ".join(files), "created": now(), "by": me}
+    head = "\n".join(f"{k}: {v}" for k, v in meta.items())
+    path.write_text(f"---\n{head}\n---\n{body}", encoding="utf-8")
+    t = Task(path)
+    t.save()
+    print(f"作成 {path.relative_to(ROOT)}（{t.status} / {owner or '未割当'}）")
+    print("→ 目的と完了条件を書いて、git add .agents && git commit && git push")
+
+
+def cmd_claim(a):
+    t = find(a.id)
+    me = a.me
+    if t.status == "doing" and t.owner != me and not a.force:
+        die(f"{t.id} は {t.owner} が作業中（--force で取り上げ。人間の了承を取ってから）")
+    if t.owner and t.owner != me and t.status != "doing" and not a.force:
+        die(f"{t.id} は {t.owner} 宛て（--force で引き受ける）")
+    if a.files:
+        t.meta["files"] = ", ".join(split_files(a.files))
+    hits = conflicts(t.files, me, skip_id=t.id)
+    if hits and not a.force:
+        die("確保が重なる:\n  " + "\n  ".join(hits))
+    prev = t.owner
+    t.meta.update(status="doing", owner=me)
+    t.note(me, "着手" + (f"（{prev} から引き継ぎ）" if prev and prev != me else ""))
+    t.save()
+    print(f"{t.id} を確保：{', '.join(t.files) or '（files 未指定）'}")
+    print(f'→ git add .agents && git commit -m "[{me}] claim {t.id}" && git push（拒否されたら pull して status を見直す）')
+
+
+def set_status(a, status, msg):
+    t = find(a.id)
+    if t.owner and t.owner != a.me and not getattr(a, "force", False):
+        die(f"{t.id} は {t.owner} のタスク")
+    t.meta["status"] = status
+    if status == "open":
+        t.meta["owner"] = ""
+    t.note(a.me, msg)
+    t.save()
+    print(f"{t.id} → {status}")
+
+
+def cmd_release(a):
+    set_status(a, "open", "確保を解除（続きは state とこのメモを参照）")
+
+
+def cmd_block(a):
+    set_status(a, "blocked", "判断待ち：" + a.reason)
+
+
+def cmd_done(a):
+    set_status(a, "done", "完了")
+
+
+def cmd_note(a):
+    t = find(a.id)
+    t.note(a.me, a.text)
+    t.save()
+    print(f"{t.id} にメモを追記")
+
+
+def cmd_state(a):
+    p = STATE / f"{a.me}.md"
+    if not p.exists():
+        text = (TEMPLATES / "state.md").read_text(encoding="utf-8")
+        p.write_text(text.replace("NAME", a.me).replace("YYYY-MM-DD HH:MM", now()), encoding="utf-8")
+        print("作成", end=" ")
+    print(p.relative_to(ROOT))
+
+
+def main():
+    ap = argparse.ArgumentParser(prog="agent", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--as", dest="me", default=os.environ.get("AGENT_NAME", ""))
+    sub = ap.add_subparsers(dest="cmd")
+    sub.add_parser("status")
+    p = sub.add_parser("new"); p.add_argument("title"); p.add_argument("--files"); p.add_argument("--to"); p.add_argument("--slug", help="ファイル名用の英字（任意）")
+    p = sub.add_parser("claim"); p.add_argument("id"); p.add_argument("--files"); p.add_argument("--force", action="store_true")
+    p = sub.add_parser("release"); p.add_argument("id"); p.add_argument("--force", action="store_true")
+    p = sub.add_parser("block"); p.add_argument("id"); p.add_argument("reason")
+    p = sub.add_parser("done"); p.add_argument("id"); p.add_argument("--force", action="store_true")
+    p = sub.add_parser("note"); p.add_argument("id"); p.add_argument("text")
+    sub.add_parser("state")
+    argv = sys.argv[1:]
+    if "--as" in argv:  # --as はどこに書いてもよい
+        i = argv.index("--as")
+        argv = ["--as", *argv[i + 1:i + 2], *argv[:i], *argv[i + 2:]]
+    a = ap.parse_args(argv)
+    cmd = a.cmd or "status"
+    if cmd != "status":
+        a.me = a.me.strip().lower()
+        if not re.fullmatch(r"[a-z][a-z0-9_-]*", a.me or ""):
+            die("名前が必要：AGENT_NAME=claude のように環境変数で渡すか --as claude")
+    TASKS.mkdir(parents=True, exist_ok=True)
+    STATE.mkdir(parents=True, exist_ok=True)
+    globals()["cmd_" + cmd](a)
+
+
+if __name__ == "__main__":
+    main()

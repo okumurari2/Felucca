@@ -1,10 +1,5 @@
-# CLAUDE.md
+@AGENTS.md
 
-## マージ方針
-
-- 変更が完了したら、確認を取らずに自動で main にマージして構わない。
-
-## UI 作法の実装箇所
-
-- ハード前提（電池・小スピーカー）から取り入れた作法は、コードのコメントの目印 `MANNER:<名前>` で探せる：`grep -rn "MANNER:" firmware`。一覧と守ること: `docs/UI_RULES.md` 10 章。動作を変えても目印は消さない。
-
+# Claude 用の補足
+- 方針はすべて AGENTS.md に書く。ここには Claude 固有のことだけ。
+- 並行開発：`.agents/PROTOCOL.md` に従う。名前は `claude`（`export AGENT_NAME=claude`）。最初に `git pull --rebase && python3 .agents/bin/agent status`、区切りごとに `.agents/state/claude.md` を更新して push。
