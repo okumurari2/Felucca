@@ -2,7 +2,10 @@
 
 # Gemini 用の補足
 - 方針はすべて AGENTS.md に書く。ここには Gemini 固有のことだけ。
-- 並行開発：`.agents/PROTOCOL.md` に従う。名前は `gemini`（`export AGENT_NAME=gemini`）。最初に `git pull --rebase && python3 .agents/bin/agent status`、区切りごとに `.agents/state/gemini.md` を更新して push。
+- 並行開発：詳細は `.agents/PROTOCOL.md`（軽量モードの節）。名前は `gemini`（`export AGENT_NAME=gemini`）。
+  1. 始めに `git pull --rebase && python3 .agents/bin/agent status`
+  2. 終わりに `.agents/state/gemini.md` を更新して push（push しない変更は他人に見えない）
+  3. 自分宛てのタスク（owner が自分）の `files:` 以外は触らない。claim/done は任意。
 
 ## Gemini 3.8 Flash のタスク検出用チェックコマンド
 作業の委譲や着手が必要か判断するための簡易コマンド集：

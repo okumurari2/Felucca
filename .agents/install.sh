@@ -45,7 +45,10 @@ stub() {  # $1=ファイル $2=import行 $3=名前
   [ -f "$1" ] && grep -q "AGENTS.md" "$1" && return 0
   { echo "$2"; echo; echo "# $3 用の補足"
     echo "- 方針はすべて AGENTS.md に書く。ここには $3 固有のことだけ。"
-    echo "- 並行開発：\`.agents/PROTOCOL.md\` に従う。名前は \`$4\`（\`export AGENT_NAME=$4\`）。最初に \`git pull --rebase && python3 .agents/bin/agent status\`、区切りごとに \`.agents/state/$4.md\` を更新して push。"
+    echo "- 並行開発：詳細は \`.agents/PROTOCOL.md\`（軽量モードの節）。名前は \`$4\`（\`export AGENT_NAME=$4\`）。"
+    echo "  1. 始めに \`git pull --rebase && python3 .agents/bin/agent status\`"
+    echo "  2. 終わりに \`.agents/state/$4.md\` を更新して push（push しない変更は他人に見えない）"
+    echo "  3. 自分宛てのタスク（owner が自分）の \`files:\` 以外は触らない。claim/done は任意。"
     if [ -f "$1" ]; then echo; cat "$1"; fi; } > "$1.tmp"
   mv "$1.tmp" "$1"
 }
