@@ -24,6 +24,7 @@ v0.1 以降の変更をまとめて 1.0 とします。
 - **DRIFT が音色も漂わせる**：DRIFT がオンの間、40〜60 秒ごとに床・霞・アルペジオのどれかが、休符のところで同じ種類の別の音色に替わります。
 - **新しい声はベールの下から**：新しい世界・いいね・DRIFT の音色替えのあと、音の明るさが低いところから約 6 秒で自然に開きます。
 - **高域のコンプレッサー**：マスターにかかり、明るい音のピークを抑えます（小さなスピーカーで耳に刺さらないように）。
+- **背景層**：4つの役とは別に、世界ごとに背景の質感を1つ（または、なし）敷きます。潮騒・雨・風・たきび・レコードのノイズ・人のざわめき。録音は使わず、すべて計算で作ります。音量は控えめで、DRIFT がレベルを揺らし、SINK で後ろへ下がり、SWELL で大きくなります（潮騒は大波）。新しい世界のとき、音色名のあとに「~ SURF」の形で名前が出ます。既存のいいねはそのまま使えます（背景層なしとして読みます）。
 - **音色が増えました**：床 +7、霞 +6、声 +7（計 +20 行）。既存のいいねはそのまま使えます。
 - **ROOM が広いホールに**：残響のコムとオールパスを長くし、プリディレイを 34 ms に。
 - **キックの初期音量**：104 → 90。
@@ -52,8 +53,8 @@ v0.1 以降の変更をまとめて 1.0 とします。
 
 - **REC の書き込み**：フラッシュ書き込みで音が約 40 ms 途切れます。
 - **いいねの保存**：MAKU / Felucca 間の更新では残るはずですが（コードからの判断）、実機では未検証です。
-- **処理負荷**：v0.1 での見積もりは最悪の世界で約 51%（ホスト測定からの換算）。v1.0 の追加分（高域コンプ・ホールリバーブなど）は実機で測っていません。
-- v0.1 以降に加えた音色・リバーブ・呼吸は、ホストでの試聴・測定が中心です。気になる音があれば [Issues](https://github.com/okumurari2/maku/issues) へ。
+- **処理負荷**：v0.1 での見積もりは最悪の世界で約 51%（ホスト測定からの換算）。v1.0 の追加分（高域コンプ・ホールリバーブ・背景層など）は実機で測っていません（背景層は、ホストの見積もりで最悪の世界に +4〜7 ポイント、合計約 58%）。
+- v0.1 以降に加えた音色・リバーブ・呼吸・背景層は（背景層は各種類の大きさと音質が、小さなスピーカーでどう聞こえるか未確認）、、ホストでの試聴・測定が中心です。気になる音があれば [Issues](https://github.com/okumurari2/maku/issues) へ。
 
 ### ライセンス
 
@@ -80,6 +81,7 @@ Everything since v0.1 is collected into 1.0.
 - **DRIFT drifts the voices too**: while it is on, every 40-60 s one of the floor / haze / arp takes another sound of its kind, at its rest.
 - **A new voice comes in under a veil**: after a new world, a like or DRIFT's change of voice, the brightness starts low and opens by itself in about 6 s.
 - **A high-band compressor** on the master takes the peaks off bright sounds, so a small speaker does not shout.
+- **A background bed**: besides the four parts, each world lays one texture under them (or none): surf, shower, breeze, campfire, vinyl or crowd. Nothing is recorded: all of it is computed. It is quiet; DRIFT moves its level, SINK pushes it back, SWELL raises it (a surf sends a big wave). A new world names it after the sounds, as "~ SURF". Existing likes keep working (they read as no bed).
 - **More sounds**: floor +7, haze +6, voice +7 (20 rows). Existing likes keep working.
 - **ROOM is a wider hall**: longer combs and allpasses, 34 ms pre-delay.
 - **The kick's initial level**: 104 to 90.
@@ -108,8 +110,8 @@ Verified on hardware by the author, except for the following, which are read fro
 
 - **REC write**: the flash write leaves a gap of about 40 ms in the sound.
 - **Likes surviving an update**: they should survive MAKU / Felucca updates (read from the code), not yet tested on hardware.
-- **CPU load**: about 51 % of the device in the worst world in v0.1 (converted from host measurements). What v1.0 adds (the high-band compressor, the hall reverb and so on) is not measured on the device.
-- The sounds, reverb and breath added since v0.1 were mostly judged on the host. If a sound bothers you, please open an [Issue](https://github.com/okumurari2/maku/issues).
+- **CPU load**: about 51 % of the device in the worst world in v0.1 (converted from host measurements). What v1.0 adds (the high-band compressor, the hall reverb, the background bed and so on) is not measured on the device (the bed adds 4-7 points in the worst world by a host estimate, about 58 % in all).
+- The sounds, reverb, breath and background bed (its levels and tone on a small speaker above all) added since v0.1 were mostly judged on the host. If a sound bothers you, please open an [Issue](https://github.com/okumurari2/maku/issues).
 
 ### Licence
 

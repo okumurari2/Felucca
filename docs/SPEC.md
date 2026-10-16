@@ -93,11 +93,20 @@ Pairs: SINK vs LIFT, SWELL vs SCRAMBLE, CASCADE vs WOBBLE. A verb's amount rises
 
 MIDI: USB and TRS in, clock follow only; CC20 (any channel) is the kick density. USB also carries the stereo audio input.
 
+## The background bed (`firmware/src/bg.c`)
+
+Besides the four parts, each world lays one computed texture under them, or none: SURF, SHOWER, BREEZE, CAMPFIRE, VINYL or CROWD
+(none 40 %, the others 9-12 % each; level 28-60 of 127). No samples and no pool; nothing below 60 Hz, the highs rolled off for a small
+speaker. It is drawn from its own random stream, so the rest of a seed's world is unchanged. DRIFT moves its level (within RANGE),
+SINK pushes it back and sends more of it to the reverb, SWELL raises it (up to 2x; a surf sends a big wave). A new world names it
+after the three sounds ("~ SURF"). It costs about 14-23 ns per sample on the host (about +4-7 points on the device, not measured there).
+The Japanese spec has the details: AMBIENT.md, "背景層".
+
 ## Likes: a machine that grows to taste (`firmware/src/maku_fav.c`)
 
 - **The ring**: up to 16 likes (`MAKU_FAV_MAX`), oldest first; a 17th pushes the oldest out. A like holds what
   `maku_world` decides and nothing else: the seed, the floor / haze / voice (by the catalog's stable ids), ROOT, SCALE,
-  BPM, the 12 macros and the floor's and haze's INSERT (type, RATE, DEPTH, FDBK), as they are when REC is pressed
+  BPM, the 12 macros, the floor's and haze's INSERT (type, RATE, DEPTH, FDBK) and the background bed (type and level; a like kept before the bed has none), as they are when REC is pressed
   (knobs turned, DRIFT's wandering, a key changed by ARP or OCT included).
 - **A new world** (HOME held) with N likes: with r = min(90 %, 15 % x N) (`MAKU_FAV_STEP`, `MAKU_FAV_CAP`) one of the
   likes, weighted by recency (1 .. N, oldest to newest), else a fresh random world. N = 0: exactly the old behaviour

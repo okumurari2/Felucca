@@ -11,7 +11,7 @@ newest release every night, so a new release is picked up without a new submissi
 | Name | MAKU (幕間機 / maku-ma-ki) |
 | Author | okumurari ([@okumurari2](https://github.com/okumurari2)); based on Felucca by Leo Kuroshita (Hügelton Instruments) |
 | Repository | <https://github.com/okumurari2/maku> |
-| Release | the newest one: <https://github.com/okumurari2/maku/releases/latest> (v0.1: `maku-0.1.fwsc`) |
+| Release | the newest one: <https://github.com/okumurari2/maku/releases/latest> (v1.0: `maku-1.0.fwsc`) |
 | Licence | GPL-3.0-only |
 | Picture | `docs/screenshot-pulse.png` (the FM-1's screen); logo: `assets/logo.jpg` |
 | Try without hardware | <https://okumurari2.github.io/maku/> |

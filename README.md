@@ -7,7 +7,7 @@
 **MAKU (幕間機)** is an always-on ambience machine firmware for the M-VAVE FM-1: power it on and a new, random,
 in-key world is already playing, and the more you like, the more the next ones come from your taste.
 Other ambient firmwares for the FM-1 have you pick a piece and tend it (e.g. [AMB-1](https://github.com/charlesvestal/fm1-amb));
-MAKU starts from a different world on every boot and grows from your likes. Four parts (a pulse, a floor, a haze, a voice), four volume knobs, three macros per
+MAKU starts from a different world on every boot and grows from your likes. Four parts (a pulse, a floor, a haze, a voice) over a quiet background bed (surf, rain, breeze, campfire, vinyl or crowd, or none), four volume knobs, three macros per
 part, and buttons that are verbs (sink, cascade, swell, wobble, lift, scramble, drift). Nothing is saved but your
 likes: every boot is a new world, HOME held makes another, and REC marks one you like; the more you like, the more
 the new worlds come from your likes (a little changed), so MAKU grows to your taste.
@@ -62,6 +62,7 @@ Reference and history:
 
 - **Four parts**: 1 pulse (kick, DRUM), 2 floor (drone, PHYS), 3 haze (shimmer, GRAIN), 4 voice (arpeggiated phrase, PHYS);
   a boot picks the sounds, root, scale, tempo (about 70-90 BPM) and every macro at random
+- **Background bed**: each world lays one computed texture under the parts, or none (surf, shower, breeze, campfire, vinyl, crowd); DRIFT moves its level, SINK pushes it back, SWELL raises it
 - **KNOB 1-4** set the volume of parts 1-4 and move the focus to that part; **SELECT / PRESETS / ALGORITHM** are the
   focused part's three macros, each moving several parameters at once, and turning right always makes it livelier
 - **Keys** play the focused part's sound, unquantized; every played note also melts into the voice's phrase.
