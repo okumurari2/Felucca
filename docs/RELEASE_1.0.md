@@ -21,16 +21,14 @@ FM-1 にはアンビエント系のファームがほかにもあります（た
 
 v0.1 以降の変更をまとめて 1.0 とします。
 
-- **呼吸**：テンポを 70 BPM より下げると、遅くなるほど 1 小節が 1 回の呼吸（最長約 18 秒）になり、キックは小節頭のやわらかい合図に、DENSITY は効かなくなります。外部クロック追従中は働きません。
-- **DRIFT が音色も漂わせる**：DRIFT がオンの間、40〜60 秒ごとに床・霞・アルペジオのどれかが、休符のところで同じ種類の別の音色に替わります。
-- **新しい声はベールの下から**：新しい世界・いいね・DRIFT の音色替えのあと、音の明るさが低いところから約 6 秒で自然に開きます。
-- **高域のコンプレッサー**：マスターにかかり、明るい音のピークを抑えます（小さなスピーカーで耳に刺さらないように）。
-- **背景層**：4つの役とは別に、世界ごとに背景の質感を1つ（または、なし）敷きます。潮騒・雨・風・たきび・レコードのノイズ・人のざわめき。録音は使わず、すべて計算で作ります。音量は控えめで、DRIFT がレベルを揺らし、SINK で後ろへ下がり、SWELL で大きくなります（潮騒は大波）。新しい世界のとき、音色名のあとに「~ SURF」の形で名前が出ます。既存のいいねはそのまま使えます（背景層なしとして読みます）。
-- **音色が増えました**：床 +7、霞 +6、声 +7（計 +20 行）。既存のいいねはそのまま使えます。
-- **ROOM が広いホールに**：残響のコムとオールパスを長くし、プリディレイを 34 ms に。
-- **キックの初期音量**：104 → 90。
-- **音色名の表示**：フォーカスした役の音色名が PRESETS の下に出て、新しい世界は 3 つの音色名を順に画面左上に出します。
-- **ビルドの修正**：呼吸の位相計算が 64 ビット除算でリンクできなかったのを直しました。
+- **テンポを落とすと、音が息をする**：70 BPM より遅くすると、1 小節がひと呼吸になっていきます（いちばん遅いと約18秒）。キックはぽつんとやわらかい合図になり、止まりそうで止まらない、ゆったりした波になります。外部クロックに合わせているときは働きません。
+- **放っておくと、音色まで変わっていく**：DRIFT をオンにしておくと、値が漂うだけでなく、40〜60秒ごとに床・霞・アルペジオのどれかが、休符のところでこっそり別の音色に入れ替わります。気づいたら違う景色にいます。
+- **背景に空気が敷かれる**：世界ごとに、潮騒・雨・風・たきび・レコードのノイズ・人のざわめきのどれか（または、なし）がうっすら流れます。録音ではなく計算で作った音です。SWELL を押すと近づいてきて（潮騒なら大波）、SINK を押すと遠くに沈みます。新しい世界のはじめに、音色名のあとに「~ SURF」のように名前が出ます。
+- **新しい世界は、ふんわり明けてくる**：新しい世界・いいね・音色替えのあと、新しい音はこもった状態から数秒かけて自然に明るくなっていきます。いきなり耳に飛び込みません。
+- **小さなスピーカーでも耳にやさしく、広く**：明るい音のきつさを抑え、ROOM の残響は広いホールのようにゆったり響きます。キックも少し控えめな音量から始まります。
+- **出会える音が増えた**：床・霞・声あわせて20種の新しい音色。既存のいいねはそのまま使えます。
+- **いま鳴っている音の名前がわかる**：フォーカスした役の音色名が PRESETS の下に出て、新しい世界では3つの音色名が順に画面の左上に出ます。
+- **バグ修正をしました。**
 
 ### インストール
 
@@ -78,16 +76,14 @@ There are other ambient firmwares for the FM-1 (for example [AMB-1](https://gith
 
 Everything since v0.1 is collected into 1.0.
 
-- **Breath**: below 70 BPM, the slower it gets the more a bar becomes one breath (up to about 18 s); the kick becomes a soft cue at the head of the bar and DENSITY fades as it loses its effect. Not under external clock.
-- **DRIFT drifts the voices too**: while it is on, every 40-60 s one of the floor / haze / arp takes another sound of its kind, at its rest.
-- **A new voice comes in under a veil**: after a new world, a like or DRIFT's change of voice, the brightness starts low and opens by itself in about 6 s.
-- **A high-band compressor** on the master takes the peaks off bright sounds, so a small speaker does not shout.
-- **A background bed**: besides the four parts, each world lays one texture under them (or none): surf, shower, breeze, campfire, vinyl or crowd. Nothing is recorded: all of it is computed. It is quiet; DRIFT moves its level, SINK pushes it back, SWELL raises it (a surf sends a big wave). A new world names it after the sounds, as "~ SURF". Existing likes keep working (they read as no bed).
-- **More sounds**: floor +7, haze +6, voice +7 (20 rows). Existing likes keep working.
-- **ROOM is a wider hall**: longer combs and allpasses, 34 ms pre-delay.
-- **The kick's initial level**: 104 to 90.
-- **The kit is shown**: the focused part's sound name under PRESETS, and a new world names its three sounds in the top left.
-- **Build fix**: the breath's phase used a 64-bit divide the target cannot link; fixed.
+- **Slow it down and the music breathes**: below 70 BPM a bar becomes one breath (up to about 18 s at the slowest). The kick turns into a soft cue and the music rolls like a slow tide. Not under external clock.
+- **Leave it alone and the sounds change too**: with DRIFT on, not only do the values wander: every 40-60 s one of the floor, haze or arp quietly swaps to another sound, at a rest. You look up and the scene is different.
+- **Air under the music**: each world lays surf, shower, breeze, campfire, vinyl crackle or a murmuring crowd faintly underneath (or nothing). All of it is computed, not recorded. SWELL brings it close (a surf sends a big wave), SINK sinks it far away. A new world names it after the sounds, as "~ SURF".
+- **A new world dawns softly**: after a new world, a like or a change of voice, the new sound starts muffled and opens by itself over a few seconds. Nothing jumps at your ears.
+- **Gentler and wider on a small speaker**: bright sounds no longer shout, ROOM rings like a wide hall, and the kick starts a little quieter.
+- **More sounds to meet**: 20 new sounds across the floor, haze and voice. Existing likes keep working.
+- **You can see what is playing**: the focused part's sound name appears under PRESETS, and a new world names its three sounds in the top left.
+- **Bug fixes.**
 
 ### Install
 
