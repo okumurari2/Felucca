@@ -11,7 +11,7 @@ body:
     attributes:
       label: MAKU version
       description: HOME + OCT- (settings menu) > ABOUT on the FM-1, or the file name of the package
-      placeholder: "v0.1.0"
+      placeholder: "v1.0"
     validations:
       required: true
   - type: input

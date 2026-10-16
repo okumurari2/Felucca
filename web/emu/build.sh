@@ -20,7 +20,7 @@ emcc ${EMU_OPT:--O2} -ffp-contract=off -std=gnu99 -w ${EMU_CFLAGS:-} \
     -DMK_STYLES "-DFELUCCA_VERSION=\"$VERSION\"" -Ibuild/gen -Ifirmware/src \
     --no-entry -sSTANDALONE_WASM -sSTACK_SIZE=1048576 -sINITIAL_MEMORY=33554432 -sFILESYSTEM=0 \
     -o build/emu/felucca.wasm web/emu/felucca_web.c
-[ "${EMU_PREVIEW:-1}" = 0 ] && PREVIEW='' || PREVIEW=' (preview)'
+[ "${EMU_PREVIEW:-0}" = 0 ] && PREVIEW='' || PREVIEW=' (preview)'
 # build.json: the commit it was built from (tools/check_emu.py compares the site's with the local build)
 python3 tools/build_id.py > build/emu/build.json
 BUILD=$(python3 -c 'import json,sys; b=json.load(sys.stdin); print(b["commit"][:7] + ("-dirty" if b["dirty"] else ""))' < build/emu/build.json)
